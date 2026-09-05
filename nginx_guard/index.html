@@ -140,6 +140,8 @@
     .layout.narrow th, .layout.narrow td { padding-left: 9px; padding-right: 9px; }
     .layout.narrow .rule-card { grid-template-columns: 1fr; gap: 10px; }
     .layout.narrow .rule-controls { min-width: 0; justify-content: flex-start; }
+    .layout.focus .sidebar { display: none; }
+    .layout.focus .main { width: 100%; }
     .layout.tiny .sidebar { width: 64px; flex-basis: 64px; }
     .layout.tiny .brand { padding: 0; justify-content: center; }
     .layout.tiny .brand-text, .layout.tiny .nav-title, .layout.tiny .nav button span { display: none; }
@@ -170,7 +172,7 @@
   <main class="main">
     <header class="topbar">
       <div class="crumb">插件 / <strong id="crumb">概览</strong></div>
-      <div class="top-actions"><span class="status" id="status-badge"><i class="dot off" id="status-dot"></i><span id="status-text">检测中</span></span><button class="btn primary" id="apply-btn">应用配置</button></div>
+      <div class="top-actions"><span class="status" id="status-badge"><i class="dot off" id="status-dot"></i><span id="status-text">检测中</span></span><button class="btn" id="layout-focus-btn" title="隐藏左侧导航，最大化插件内容">内容最大化</button><button class="btn primary" id="apply-btn">应用配置</button></div>
     </header>
     <section class="content" id="content"></section>
   </main>
@@ -312,6 +314,14 @@
   function ruleSeverity(value) { return { high: "高", medium: "中", low: "低" }[String(value || "").toLowerCase()] || value || "中"; }
   function ruleAction(value) { return { block: "拦截", monitor: "监控", allow: "放行", "404": "返回 404", "429": "限流 429", "444": "关闭连接" }[String(value || "").toLowerCase()] || value || "监控"; }
   function ruleMatch(value) { return { uri_contains: "URI 包含", uri_regex: "URI 正则", query_contains: "查询参数包含", method: "请求方法", ip: "客户端 IP", user_agent: "User-Agent", host: "主机名", header: "请求头" }[String(value || "").toLowerCase()] || value || "未指定"; }
+  var builtinRuleNames = { NG1001: "敏感文件暴露", NG1002: "路径穿越", NG1003: "云元数据 SSRF", NG2001: "SQL 注入特征", NG2002: "XSS 特征", NG2003: "扫描器 User-Agent", NG3001: "CC 速率限制", NG3002: "临时 IP 封禁" };
+  function ruleNameLabel(ruleId, fallback) {
+    var name = String(fallback || "").trim();
+    if (name) return name;
+    var id = String(ruleId || "").trim();
+    if (!id || id === "—" || id === "-") return "—";
+    return builtinRuleNames[id.toUpperCase()] || "自定义规则";
+  }
   function customRuleDescription(rule) { var parts = []; if (rule.match) parts.push("匹配类型：" + ruleMatch(rule.match)); if (rule.header) parts.push("请求头：" + rule.header); if (rule.pattern) parts.push("匹配内容：" + rule.pattern); return parts.join("；") || "未填写规则说明"; }
   function overview() {
     var m = state.metrics || {};
@@ -429,7 +439,12 @@
       '<div class="card"><div class="card-body"><div class="form-grid"><div class="field"><label>网站</label><select id="ip-site"><option value="">请选择网站</option>' + siteOptions() + '</select></div><div class="field"><label>新增地址</label><div class="inline"><input id="ip-value" placeholder="例如 1.2.3.0/24"><select id="ip-list"><option value="blacklist">黑名单</option><option value="whitelist">白名单</option></select><button class="btn primary" data-add-ip>添加</button></div></div></div><div id="ip-lists" style="margin-top:18px"><div class="empty">选择网站后加载列表</div></div></div></div>';
   }
   function analysisTopTable(title, rows, key, label) {
-    var body = (rows || []).map(function (row) { return '<tr><td>' + esc(row[key] || row.value || "—") + '</td><td>' + esc(row.count || 0) + '</td></tr>'; }).join("");
+    var body = (rows || []).map(function (row) {
+      var value = row[key] || row.value || "—";
+      var display = key === "rule_id" ? ruleNameLabel(value, row.rule_name) : value;
+      var cell = key === "rule_id" ? '<strong>' + esc(display) + '</strong><br><span class="help">' + esc(value) + '</span>' : esc(display);
+      return '<tr><td>' + cell + '</td><td>' + esc(row.count || 0) + '</td></tr>';
+    }).join("");
     return '<div class="card"><div class="card-head"><h3>' + esc(title) + '</h3></div><div class="table-wrap"><table><thead><tr><th>' + esc(label || "名称") + '</th><th>次数</th></tr></thead><tbody>' + (body || '<tr><td colspan="2"><div class="empty">暂无</div></td></tr>') + '</tbody></table></div></div>';
   }
   function logAnalysisView() {
@@ -448,7 +463,7 @@
       var action = String(row.action || "MONITOR").toUpperCase();
       var blocked = row.blocked === true || ["BLOCK", "DENY", "RATE_LIMIT", "403", "404", "429", "444"].indexOf(action) >= 0;
       var displayAction = action || (blocked ? "BLOCK" : "MONITOR");
-      return '<tr><td>' + esc(formatTime(row.time || "—")) + '</td><td>' + esc(row.cfip || "—") + '</td><td>' + esc(row.client_ip || row.remote_addr || "—") + '</td><td>' + esc(row.host || "—") + '<br><span class="help">' + esc(row.method || "GET") + ' ' + esc(row.uri || row.request || "—") + (row.query ? '?' + esc(row.query) : '') + '</span></td><td>' + esc(row.rule_id || "—") + '<br><span class="help">' + esc(row.rule_name || row.attack_type || "—") + '</span></td><td class="log-action ' + (blocked ? "block" : "monitor") + '">' + esc(displayAction) + '</td><td>' + esc(row.status || "—") + '<br><span class="help">' + esc(row.request_time || "—") + ' s</span></td></tr>';
+      return '<tr><td>' + esc(formatTime(row.time || "—")) + '</td><td>' + esc(row.cfip || "—") + '</td><td>' + esc(row.client_ip || row.remote_addr || "—") + '</td><td>' + esc(row.host || "—") + '<br><span class="help">' + esc(row.method || "GET") + ' ' + esc(row.uri || row.request || "—") + (row.query ? '?' + esc(row.query) : '') + '</span></td><td>' + esc(row.rule_id || "—") + '<br><span class="help">' + esc(ruleNameLabel(row.rule_id, row.rule_name || row.attack_type)) + '</span></td><td class="log-action ' + (blocked ? "block" : "monitor") + '">' + esc(displayAction) + '</td><td>' + esc(row.status || "—") + '<br><span class="help">' + esc(row.request_time || "—") + ' s</span></td></tr>';
     }).join("");
     if (!rows) rows = '<tr><td colspan="7"><div class="empty">暂无攻击日志</div></td></tr>';
     return header("攻击日志", "时间格式：yyyy-MM-dd HH:mm:ss；查询前端只展示脱敏后的 query，Cookie、Authorization、Token 不落入列表", '<button class="btn" data-export-analysis>导出 CSV</button>') + '<div class="card"><div class="card-head"><h2>最近事件</h2><div class="toolbar"><select id="log-site"><option value="">请选择网站</option>' + siteOptions() + '</select><select id="log-filter"><option value="all">全部事件</option><option value="blocked">仅显示已拦截</option></select><select id="log-window"><option value="24h">最近 24 小时</option><option value="3d">最近 3 天</option><option value="7d">最近 7 天</option></select><button class="btn" data-load-logs>查询</button><button class="btn primary" data-analyze-logs>日志分析</button></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>CFIP</th><th>客户端 IP</th><th>域名 / 请求</th><th>规则 / 攻击类型</th><th>动作</th><th>状态 / 耗时</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>' + logAnalysisView();
@@ -514,6 +529,23 @@
     });
     observer.observe(layout);
   }
+  function setFocusLayout(enabled) {
+    var layout = document.querySelector(".layout");
+    if (!layout) return;
+    var focused = !!enabled;
+    layout.classList.toggle("focus", focused);
+    var button = document.getElementById("layout-focus-btn");
+    if (button) {
+      button.textContent = focused ? "显示侧栏" : "内容最大化";
+      button.title = focused ? "显示左侧导航" : "隐藏左侧导航，最大化插件内容";
+    }
+    try { window.localStorage.setItem("nginx_guard_focus_layout", focused ? "1" : "0"); } catch (ignore) {}
+  }
+  function restoreFocusLayout() {
+    var focused = false;
+    try { focused = window.localStorage.getItem("nginx_guard_focus_layout") === "1"; } catch (ignore) {}
+    setFocusLayout(focused);
+  }
   function render() {
     document.getElementById("crumb").textContent = names[state.view];
     document.querySelectorAll(".nav button").forEach(function (node) { node.classList.toggle("active", node.getAttribute("data-view") === state.view); });
@@ -551,6 +583,7 @@
     return rateTemplateDefaults(kind);
   }
   document.addEventListener("click", function (event) {
+    if (event.target.closest("#layout-focus-btn")) { var focusLayout = document.querySelector(".layout"); setFocusLayout(!(focusLayout && focusLayout.classList.contains("focus"))); fitPanel(); return; }
     var view = event.target.closest("[data-view]"); if (view) { state.view = view.getAttribute("data-view"); render(); if (state.view === "sites") load("list_sites", "sites", []); if (state.view === "rules") load("get_rules", "rules", { builtin: [], custom: [] }); if (state.view === "backups") load("get_backups", "backups", []); return; }
     if (event.target.closest("#apply-btn")) { toast("正在执行 backup → nginx -t → reload…"); post("apply_config").then(function () { toast("配置已应用"); refresh(); }).catch(function (error) { toast(error.message, true); }); }
     if (event.target.closest("[data-toggle-engine]")) { var enabled = !state.status.engine_enabled; post("save_global", { engine_enabled: enabled, preferred_engine: state.status.preferred_engine || "auto" }).then(function () { toast((enabled ? "引擎已启用" : "引擎已停用") + "，请点击应用配置"); refresh(); }).catch(function (error) { toast(error.message, true); }); }
@@ -579,6 +612,7 @@
   document.addEventListener("change", function (event) { if (event.target.id === "ip-site") { state.selectedSite = event.target.value; loadIp(event.target.value); } if (event.target.id === "log-site") { state.logSite = event.target.value; state.logAnalysis = null; } if (event.target.id === "log-filter") { state.logFilter = event.target.value; state.logAnalysis = null; } if (event.target.id === "log-window") { state.logWindow = event.target.value; state.logAnalysis = null; } if (event.target.id === "edit-rate-template") { var defaults = templateValues(event.target.value); document.getElementById("edit-rate-template-rate").value = defaults.rate; document.getElementById("edit-rate-template-unit").value = defaults.unit; document.getElementById("edit-rate-template-burst").value = defaults.burst; } var action = event.target.closest("[data-rule-action]"); if (action) { post("save_rule", { rule_id: action.getAttribute("data-rule-action"), enabled: action.getAttribute("data-rule-enabled"), action: action.value }).then(function () { toast("规则动作已保存，请点击应用配置"); load("get_rules", "rules", { builtin: [], custom: [] }); }).catch(function (error) { toast(error.message, true); }); } });
   function refresh() { return Promise.all([load("get_status", "status", state.status), load("list_sites", "sites", []), load("get_metrics", "metrics", state.metrics), load("get_cloudflare", "cloudflare", state.cloudflare)]); }
   render();
+  restoreFocusLayout();
   fitPanel();
   observePanelSize();
   window.addEventListener("resize", fitPanel);

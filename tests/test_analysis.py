@@ -118,6 +118,20 @@ class LogAnalysisTests(unittest.TestCase):
         self.assertLessEqual(len(result["top_ips"]), 2)
         self.assertEqual(len(analyze_jsonl([], now=self.now, window="7d")["trend"]), 7)
 
+    def test_builtin_rule_name_is_restored_for_old_logs_without_rule_name(self):
+        row = {
+            "time": (self.now - timedelta(minutes=1)).isoformat(),
+            "remote_addr": "198.51.100.20",
+            "uri": "/.env",
+            "rule_id": "NG1001",
+            "status": 403,
+            "action": "BLOCK",
+        }
+
+        result = analyze_jsonl([json.dumps(row)], now=self.now, window="24h")
+
+        self.assertEqual(result["top_rules"][0]["rule_name"], "敏感文件暴露")
+
     def test_csv_is_bom_prefixed_aggregated_and_does_not_export_secrets(self):
         result = analyze_jsonl(
             [json.dumps(row) for row in self.rows()],
@@ -129,6 +143,7 @@ class LogAnalysisTests(unittest.TestCase):
         self.assertTrue(csv_text.startswith("\ufeff"))
         self.assertIn("Top 攻击 IP", csv_text)
         self.assertIn("198.51.100.11", csv_text)
+        self.assertIn("SQL 注入特征", csv_text)
         self.assertNotIn("must-not-export", csv_text)
         self.assertNotIn("authorization", csv_text.lower())
         self.assertNotIn("token=", csv_text.lower())

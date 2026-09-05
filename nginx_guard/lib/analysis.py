@@ -55,6 +55,27 @@ _TEMPLATES = {
     "upload": {"rate": 2, "unit": "s", "burst": 5},
 }
 
+RULE_NAMES = {
+    "NG1001": "敏感文件暴露",
+    "NG1002": "路径穿越",
+    "NG1003": "云元数据 SSRF",
+    "NG2001": "SQL 注入特征",
+    "NG2002": "XSS 特征",
+    "NG2003": "扫描器 User-Agent",
+    "NG3001": "CC 速率限制",
+    "NG3002": "临时 IP 封禁",
+}
+
+
+def _rule_name(rule_id, value=""):
+    name = str(value or "").strip()
+    if name:
+        return name
+    normalized_id = str(rule_id or "").strip()
+    if not normalized_id or normalized_id in {"—", "-"}:
+        return ""
+    return RULE_NAMES.get(normalized_id.upper(), "自定义规则")
+
 
 def _as_utc(value=None):
     if value is None:
@@ -319,7 +340,7 @@ def analyze_jsonl(lines, now=None, window="24h", blocked_only=False, top_n=10):
         ip = str(row.get("client_ip") or row.get("remote_addr") or "—")
         path = _event_path(row)
         rule_id = str(row.get("rule_id") or row.get("rule") or "—")
-        rule_name = str(row.get("rule_name") or row.get("attack_type") or "")
+        rule_name = _rule_name(rule_id, row.get("rule_name") or row.get("attack_type"))
         status = str(row.get("status") if row.get("status") is not None else "—")
         action = str(row.get("action") or ("BLOCK" if event_blocked else "MONITOR")).upper()
         if _is_attack_event(row, event_blocked):
@@ -407,6 +428,11 @@ def analysis_to_csv(result):
         writer.writerow([title, "名称", "请求数", "拦截数"])
         for row in rows:
             name = row.get(fields[0], row.get("value", ""))
+            if fields[0] == "rule_id":
+                rule_id = str(name or "").strip()
+                display_name = _rule_name(rule_id, row.get("rule_name"))
+                if display_name and rule_id:
+                    name = "%s（%s）" % (display_name, rule_id)
             writer.writerow([title, name, row.get("count", 0), row.get("blocked", "")])
         writer.writerow([])
 

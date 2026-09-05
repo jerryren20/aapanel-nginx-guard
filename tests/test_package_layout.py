@@ -56,6 +56,10 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn("验证码接口", ui)
         self.assertIn("上传接口", ui)
         self.assertIn("导出 csv", ui)
+        self.assertIn("function rulenamelabel", ui)
+        self.assertIn("layout.focus .sidebar", ui)
+        self.assertIn("内容最大化", ui)
+        self.assertIn('layout.classlist.toggle("focus"', ui)
 
     def test_site_editor_is_namespaced_and_mounts_inside_plugin(self):
         ui = (ROOT / "nginx_guard" / "index.html").read_text(encoding="utf-8").lower()
