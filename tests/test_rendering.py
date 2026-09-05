@@ -107,6 +107,8 @@ class RenderingTests(unittest.TestCase):
             self.assertIn('"attack_type"', fragment)
             self.assertIn('"rule_name"', fragment)
             self.assertIn('"action"', fragment)
+            self.assertIn('"content_type":"$http_content_type"', fragment)
+            self.assertIn('"content_length":"$http_content_length"', fragment)
             self.assertIn("ng_guard_safe_query", fragment)
             self.assertIn("[REDACTED]", fragment)
             self.assertIn("REJECTED NG3001", fragment)
@@ -253,6 +255,18 @@ class RenderingTests(unittest.TestCase):
             self.assertIn("ng_guard_url_key_1_0", global_fragment)
             self.assertIn("rate=2r/s", global_fragment)
             self.assertIn("limit_req zone=ng_guard_url_1_0", site_fragment)
+
+    def test_url_rate_path_supports_per_minute_units(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = NginxConfigManager(Path(tmp) / "nginx.conf", Path(tmp) / "vhost", Path(tmp))
+            site = {
+                "id": "1",
+                "mode": "BLOCK",
+                "engine": "native",
+                "rate_paths": [{"path": "/login", "rate": 10, "unit": "m", "burst": 3}],
+            }
+            fragment = manager._render_global(True, False, [site])
+            self.assertIn("rate=10r/m", fragment)
 
     def test_whitelisted_ip_has_no_native_rate_key_for_that_site(self):
         with tempfile.TemporaryDirectory() as tmp:

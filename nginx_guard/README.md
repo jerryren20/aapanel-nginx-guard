@@ -1,4 +1,4 @@
-# Nginx Guard 1.0.13
+# Nginx Guard 1.0.14
 
 Nginx Guard 是一个面向 aaPanel Nginx 的轻量、按站点启用的 WAF 插件。生产界面使用 aaPanel 风格的绿色主题，安装后默认关闭，不会在安装阶段改写 Nginx。
 
@@ -12,6 +12,8 @@ Nginx Guard 是一个面向 aaPanel Nginx 的轻量、按站点启用的 WAF 插
 - 日志使用 Nginx buffered JSONL，默认单文件 20 MB、保留 7 天、总量最多 100 MB；插件查询和应用配置时会兜底清理，系统 logrotate 可用时也会轮转。
 - 攻击日志支持保留网站筛选、仅显示实际拦截记录，并分别展示 Cloudflare 边缘 IP（CFIP）和真实客户端 IP；历史日志缺少字段时自动兼容。
 - Cloudflare 页面支持输入单个 IPv4/IPv6 查询当前生效网段及来源（官方/手动），查询不会保存配置或 reload Nginx。
+- IP 黑白名单支持精确逐条删除；攻击日志支持时间窗口分析、拦截筛选、CSV 聚合导出和登录/验证码/上传接口候选建议。
+- 站点 URL 限速模板支持 `r/s` 与 `r/m`，建议仅在人工确认后保存并点击应用配置。
 
 ## v1 功能
 
@@ -23,7 +25,7 @@ Lua 可用时，站点的攻击阈值可写入 Nginx shared dict，按 TTL 临�
 
 ## 安装
 
-1. 在 aaPanel 的 App Store → Third-party Plugin → Import 导入 dist/nginx_guard-1.0.13.zip。
+1. 在 aaPanel 的 App Store → Third-party Plugin → Import 导入 dist/nginx_guard-1.0.14.zip。
 2. 打开 Nginx Guard，确认网站列表和诊断信息。
 3. 先将站点设为 MONITOR，保存后点击右上角“应用配置”。
 4. 观察日志确认误报，再切换到 BLOCK。

@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -33,6 +33,104 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(result["data"][0]["client_ip"], "198.51.100.3")
             self.assertEqual(result["data"][0]["cfip"], "")
             self.assertTrue(result["data"][0]["blocked"])
+
+    def test_log_analysis_and_csv_export_are_read_only_and_include_rotated_logs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs = root / "logs"
+            logs.mkdir()
+            now = datetime.now(timezone.utc)
+            rows = [
+                {
+                    "time": (now - timedelta(minutes=2)).isoformat(),
+                    "remote_addr": "198.51.100.7",
+                    "uri": "/login",
+                    "method": "POST",
+                    "action": "BLOCK",
+                    "status": 403,
+                    "rule_id": "NG2001",
+                },
+                {
+                    "time": (now - timedelta(minutes=1)).isoformat(),
+                    "remote_addr": "198.51.100.8",
+                    "uri": "/login",
+                    "method": "POST",
+                    "action": "MONITOR",
+                    "status": 200,
+                },
+            ]
+            content = "".join(json.dumps(row) + "\n" for row in rows)
+            (logs / "events-site-1.jsonl").write_text(content, encoding="utf-8")
+            (logs / "events-site-1.jsonl.20260904").write_text(
+                json.dumps(
+                    {
+                        "time": (now - timedelta(hours=1)).isoformat(),
+                        "remote_addr": "198.51.100.9",
+                        "uri": "/login",
+                        "method": "POST",
+                        "action": "BLOCK",
+                        "status": 403,
+                        "rule_id": "NG2001",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with patch.object(controller, "DATA_ROOT", root):
+                instance = controller.nginx_guard_main()
+                result = instance.get_log_analysis({"site_id": "1", "window": "24h"})
+                exported = instance.export_log_analysis(
+                    {"site_id": "1", "window": "24h", "blocked_only": "true"}
+                )
+
+            self.assertTrue(result["status"])
+            self.assertEqual(result["data"]["total"], 3)
+            self.assertEqual(result["data"]["blocked"], 2)
+            self.assertTrue(exported["status"])
+            self.assertTrue(exported["data"]["content"].startswith("\ufeff"))
+            self.assertEqual(exported["data"]["filename"], "nginx_guard_analysis_site-1_24h.csv")
+
+    def test_save_site_policy_accepts_per_path_rate_units_and_old_shape_defaults_to_seconds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(controller, "DATA_ROOT", Path(tmp)):
+                instance = controller.nginx_guard_main()
+                result = instance.save_site_policy(
+                    {
+                        "site_id": "1",
+                        "policy": {
+                            "mode": "BLOCK",
+                            "rate_paths": [
+                                {"path": "/login", "rate": 10, "unit": "m", "burst": 3},
+                                {"path": "/legacy", "rate": 2, "burst": 5},
+                            ],
+                        },
+                    }
+                )
+                saved = instance.store.load_site_policy("1")
+
+            self.assertTrue(result["status"])
+            self.assertEqual(saved["rate_paths"][0]["unit"], "m")
+            self.assertEqual(saved["rate_paths"][1]["unit"], "s")
+
+    def test_ip_list_remove_is_an_exact_persistent_operation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(controller, "DATA_ROOT", Path(tmp)):
+                instance = controller.nginx_guard_main()
+                instance.store.save_site_policy(
+                    "1",
+                    {
+                        "mode": "BLOCK",
+                        "blacklist": ["192.0.2.1", "192.0.2.10", "198.51.100.0/24"],
+                        "whitelist": ["203.0.113.8"],
+                    },
+                )
+                result = instance.mutate_ip_list(
+                    {"site_id": "1", "list_name": "blacklist", "operation": "remove", "address": "192.0.2.1"}
+                )
+                saved = instance.store.load_site_policy("1")
+
+            self.assertTrue(result["status"])
+            self.assertEqual(saved["blacklist"], ["192.0.2.10", "198.51.100.0/24"])
 
     def test_lookup_cloudflare_ip_uses_effective_config_without_reload(self):
         with tempfile.TemporaryDirectory() as tmp:

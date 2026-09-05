@@ -26,6 +26,8 @@ class LogRotationTests(unittest.TestCase):
         normalized = normalize_event({"remote_addr": "198.51.100.8", "status": 403, "rule_id": "NG1001"})
         self.assertEqual(normalized["client_ip"], "198.51.100.8")
         self.assertEqual(normalized["cfip"], "")
+        self.assertEqual(normalized["content_type"], "")
+        self.assertEqual(normalized["content_length"], "")
         self.assertTrue(normalized["blocked"])
 
     def test_rotation_caps_file_size_and_count(self):

@@ -27,6 +27,7 @@ try:
         normalize_cloudflare_config,
     )
     from .lib.config_store import ConfigStore
+    from .lib.analysis import analyze_jsonl, analysis_to_csv
     from .lib.logs import cleanup_jsonl_directory, normalize_event
     from .lib.metrics import aggregate_jsonl
     from .lib.nginx import (
@@ -58,6 +59,7 @@ except ImportError:
         normalize_cloudflare_config,
     )
     from lib.config_store import ConfigStore
+    from lib.analysis import analyze_jsonl, analysis_to_csv
     from lib.logs import cleanup_jsonl_directory, normalize_event
     from lib.metrics import aggregate_jsonl
     from lib.nginx import (
@@ -231,7 +233,7 @@ class nginx_guard_main:
         desired = self.store.load_desired()
         nginx_v_output = self._nginx_v_output()
         data = {
-            "version": "1.0.13",
+            "version": "1.0.14",
             "engine_enabled": bool(desired.get("engine_enabled", False)),
             "preferred_engine": desired.get("preferred_engine", "auto"),
             "runtime_failure_policy": desired.get("runtime_failure_policy", "open"),
@@ -340,7 +342,11 @@ class nginx_guard_main:
                 path_burst = max(1, min(10000, int(item.get("burst", 20))))
             except (TypeError, ValueError):
                 return _json_response(False, "URL 限流速率无效")
-            rate_paths.append({"path": path, "rate": path_rate, "burst": path_burst})
+            raw_unit = str(item.get("unit", "s")).strip().lower()
+            unit = {"r/s": "s", "r/m": "m"}.get(raw_unit, raw_unit)
+            if unit not in {"s", "m"}:
+                return _json_response(False, "URL 限流单位只能是 s 或 m")
+            rate_paths.append({"path": path, "rate": path_rate, "unit": unit, "burst": path_burst})
         auto_ban = policy.get("auto_ban")
         if not isinstance(auto_ban, dict):
             auto_ban = existing.get("auto_ban", {}) if isinstance(existing.get("auto_ban"), dict) else {}
@@ -588,6 +594,83 @@ class nginx_guard_main:
                         continue
                     rows.append(row)
         return _json_response(True, "ok", rows[-limit:][::-1])
+
+    @staticmethod
+    def _blocked_only_value(value):
+        return str(value or "false").strip().lower() in {"1", "true", "on", "yes"}
+
+    def _site_log_paths(self, site_id):
+        """Return only this plugin's active and rotated JSONL files."""
+
+        logs_dir = DATA_ROOT / "logs"
+        if not logs_dir.is_dir():
+            return []
+        prefix = "events-site-%s.jsonl" % normalize_site_id(site_id)
+        paths = []
+        for path in logs_dir.glob(prefix + "*"):
+            if path.is_file() and not path.is_symlink() and (path.name == prefix or path.name.startswith(prefix + ".")):
+                paths.append(path)
+        return sorted(paths, key=lambda item: (item.name != prefix, item.name))
+
+    def _iter_site_log_lines(self, site_id):
+        for path in self._site_log_paths(site_id):
+            try:
+                with path.open("r", encoding="utf-8", errors="replace") as handle:
+                    for line in handle:
+                        yield line
+            except OSError:
+                continue
+
+    def _analyze_site_logs(self, site_id, window, blocked_only=False, top_n=10):
+        result = analyze_jsonl(
+            self._iter_site_log_lines(site_id),
+            window=window,
+            blocked_only=blocked_only,
+            top_n=top_n,
+        )
+        result["site_id"] = normalize_site_id(site_id)
+        return result
+
+    @api_errors
+    def get_log_analysis(self, get=None):
+        denied = self._guard(get)
+        if denied:
+            return denied
+        site_id = normalize_site_id(_value(get, "site_id"))
+        if public is not None and self._known_site(site_id) is None:
+            return _json_response(False, "网站不存在或无法由 aaPanel 验证")
+        self._rotate_logs_unchecked()
+        blocked_only = self._blocked_only_value(_value(get, "blocked_only", "false"))
+        top_n = _value(get, "top_n", 10)
+        result = self._analyze_site_logs(
+            site_id,
+            str(_value(get, "window", "24h")),
+            blocked_only=blocked_only,
+            top_n=top_n,
+        )
+        result["blocked_only"] = blocked_only
+        return _json_response(True, "ok", result)
+
+    @api_errors
+    def export_log_analysis(self, get=None):
+        denied = self._guard(get)
+        if denied:
+            return denied
+        site_id = normalize_site_id(_value(get, "site_id"))
+        if public is not None and self._known_site(site_id) is None:
+            return _json_response(False, "网站不存在或无法由 aaPanel 验证")
+        self._rotate_logs_unchecked()
+        window = str(_value(get, "window", "24h"))
+        blocked_only = self._blocked_only_value(_value(get, "blocked_only", "false"))
+        result = self._analyze_site_logs(site_id, window, blocked_only=blocked_only, top_n=50)
+        return _json_response(
+            True,
+            "ok",
+            {
+                "filename": "nginx_guard_analysis_site-%s_%s.csv" % (site_id, result["window"]),
+                "content": analysis_to_csv(result),
+            },
+        )
 
     @api_errors
     def get_metrics(self, get=None):

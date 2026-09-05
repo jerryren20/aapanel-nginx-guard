@@ -55,6 +55,12 @@ def normalize_event(row):
     normalized["client_ip"] = str(
         normalized.get("client_ip") or normalized.get("remote_addr") or ""
     )
+    normalized["content_type"] = str(
+        normalized.get("content_type") or normalized.get("content-type") or ""
+    )
+    normalized["content_length"] = str(
+        normalized.get("content_length") or normalized.get("content-length") or ""
+    )
     normalized["blocked"] = is_blocked_event(normalized)
     return normalized
 

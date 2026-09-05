@@ -526,7 +526,11 @@ class NginxConfigManager:
                 burst = max(1, min(10000, int(item.get("burst", 20))))
             except (TypeError, ValueError) as exc:
                 raise NginxCommandError("invalid rate path limits") from exc
-            result.append((path, rate, burst))
+            raw_unit = str(item.get("unit", "s")).strip().lower()
+            unit = {"r/s": "s", "r/m": "m"}.get(raw_unit, raw_unit)
+            if unit not in {"s", "m"}:
+                raise NginxCommandError("invalid rate path unit")
+            result.append((path, rate, unit, burst))
         return result
 
     @staticmethod
@@ -765,7 +769,7 @@ class NginxConfigManager:
                 "}",
             ])
         lines.extend([
-            'log_format ng_guard_json escape=json \'{"time":"$time_iso8601","remote_addr":"$remote_addr","cfip":"$ng_guard_cfip","client_ip":"$remote_addr","host":"$host","method":"$request_method","uri":"$uri","query":"$ng_guard_safe_query","status":$status,"request_time":$request_time,"rule_id":"$ng_guard_event_rule_id","rule_name":"$ng_guard_rule_name","attack_type":"$ng_guard_attack_type","action":"$ng_guard_event_action","user_agent":"$http_user_agent"}\';',
+            'log_format ng_guard_json escape=json \'{"time":"$time_iso8601","remote_addr":"$remote_addr","cfip":"$ng_guard_cfip","client_ip":"$remote_addr","host":"$host","method":"$request_method","uri":"$uri","query":"$ng_guard_safe_query","status":$status,"request_time":$request_time,"rule_id":"$ng_guard_event_rule_id","rule_name":"$ng_guard_rule_name","attack_type":"$ng_guard_attack_type","action":"$ng_guard_event_action","user_agent":"$http_user_agent","content_type":"$http_content_type","content_length":"$http_content_length"}\';',
             "map $uri $ng_guard_dynamic {",
             "    default 1;",
             "    \"~*\\.(?:css|js|mjs|png|jpg|jpeg|webp|svg|ico|woff|woff2|ttf|map)$\" 0;",
@@ -867,7 +871,7 @@ class NginxConfigManager:
                 "limit_req_zone $ng_guard_rate_key_%s zone=ng_guard_rate_site_%s:10m rate=%sr/s;" %
                 (site_id, site_id, rate)
             )
-            for index, (path, path_rate, _path_burst) in enumerate(self._rate_path_settings(site)):
+            for index, (path, path_rate, path_unit, _path_burst) in enumerate(self._rate_path_settings(site)):
                 key_name = "ng_guard_url_key_%s_%s" % (site_id, index)
                 zone_name = "ng_guard_url_%s_%s" % (site_id, index)
                 path_pattern = re.escape(path.rstrip("/")).replace('"', '\\"')
@@ -876,8 +880,8 @@ class NginxConfigManager:
                     '    default "";',
                     '    "~*^%s(?:/|$)" $ng_guard_rate_key_%s;' % (path_pattern, site_id),
                     "}",
-                    "limit_req_zone $%s zone=%s:1m rate=%sr/s;" %
-                    (key_name, zone_name, path_rate),
+                    "limit_req_zone $%s zone=%s:1m rate=%sr/%s;" %
+                    (key_name, zone_name, path_rate, path_unit),
                 ])
             for index, custom in enumerate(site.get("custom_rules", []) or []):
                 try:
@@ -959,7 +963,7 @@ class NginxConfigManager:
                 lines.append("limit_req_log_level notice;")
                 lines.append("limit_req_status 429;")
                 lines.append("limit_req zone=ng_guard_rate_site_%s burst=%s nodelay;" % (site_id, burst))
-                for index, (_path, _path_rate, path_burst) in enumerate(self._rate_path_settings(site)):
+                for index, (_path, _path_rate, _path_unit, path_burst) in enumerate(self._rate_path_settings(site)):
                     lines.append(
                         "limit_req zone=ng_guard_url_%s_%s burst=%s nodelay;" %
                         (site_id, index, path_burst)

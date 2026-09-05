@@ -14,7 +14,7 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertTrue(ui_path.is_file())
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["name"], "nginx_guard")
-        self.assertEqual(manifest["version"], "1.0.13")
+        self.assertEqual(manifest["version"], "1.0.14")
         self.assertTrue(manifest["shell"].endswith("install.sh"))
         ui = ui_path.read_text(encoding="utf-8").lower()
         self.assertIn("#20a53a", ui)
@@ -49,6 +49,13 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn("lookup_cloudflare_ip", ui)
         self.assertIn("cfip", ui)
         self.assertIn("客户端 ip", ui)
+        self.assertIn("删除", ui)
+        self.assertIn("日志分析", ui)
+        self.assertIn("仅显示已拦截", ui)
+        self.assertIn("登录接口", ui)
+        self.assertIn("验证码接口", ui)
+        self.assertIn("上传接口", ui)
+        self.assertIn("导出 csv", ui)
 
     def test_site_editor_is_namespaced_and_mounts_inside_plugin(self):
         ui = (ROOT / "nginx_guard" / "index.html").read_text(encoding="utf-8").lower()

@@ -2,7 +2,7 @@
 
 ## 导入
 
-构建产物为 dist/nginx_guard-1.0.13.zip，ZIP 顶层目录为 nginx_guard/，aaPanel 解压后应位于 /www/server/panel/plugin/nginx_guard/。info.json、install.sh、uninstall.sh、index.html、nginx_guard_main.py 和 icon.png 均位于该目录根部。
+构建产物为 dist/nginx_guard-1.0.14.zip，ZIP 顶层目录为 nginx_guard/，aaPanel 解压后应位于 /www/server/panel/plugin/nginx_guard/。info.json、install.sh、uninstall.sh、index.html、nginx_guard_main.py 和 icon.png 均位于该目录根部。
 
 安装脚本创建：
 
