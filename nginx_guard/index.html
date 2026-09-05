@@ -127,6 +127,19 @@
     .layout.compact .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .layout.compact .grid { grid-template-columns: 1fr; }
     .layout.compact .topbar, .layout.compact .content { padding-left: 16px; padding-right: 16px; }
+    .layout.narrow .sidebar { width: 64px; flex-basis: 64px; }
+    .layout.narrow .brand { padding: 0; justify-content: center; }
+    .layout.narrow .brand-text, .layout.narrow .nav-title, .layout.narrow .nav button span { display: none; }
+    .layout.narrow .nav button { justify-content: center; padding: 11px 0; }
+    .layout.narrow .topbar, .layout.narrow .content { padding-left: 12px; padding-right: 12px; }
+    .layout.narrow .top-actions { gap: 5px; }
+    .layout.narrow .top-actions .status { display: none; }
+    .layout.narrow .view-title, .layout.narrow .card-head { align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+    .layout.narrow .toolbar { width: 100%; }
+    .layout.narrow .toolbar select, .layout.narrow .toolbar .btn { flex: 1 1 120px; min-width: 0; }
+    .layout.narrow th, .layout.narrow td { padding-left: 9px; padding-right: 9px; }
+    .layout.narrow .rule-card { grid-template-columns: 1fr; gap: 10px; }
+    .layout.narrow .rule-controls { min-width: 0; justify-content: flex-start; }
     .layout.tiny .sidebar { width: 64px; flex-basis: 64px; }
     .layout.tiny .brand { padding: 0; justify-content: center; }
     .layout.tiny .brand-text, .layout.tiny .nav-title, .layout.tiny .nav button span { display: none; }
@@ -474,11 +487,12 @@
     if (key === "config_writable") return value ? "是" : "否";
     return value;
   }
-  function fitPanel() {
+  function fitPanel(widthOverride) {
     var layout = document.querySelector(".layout");
     if (!layout) return;
-    var width = layout.getBoundingClientRect().width;
+    var width = typeof widthOverride === "number" ? widthOverride : layout.getBoundingClientRect().width;
     layout.classList.toggle("compact", width < 920);
+    layout.classList.toggle("narrow", width < 760);
     layout.classList.toggle("tiny", width < 560);
     var host = layout.parentElement;
     if (!host || host === document.body) return;
@@ -491,6 +505,14 @@
       layout.style.minHeight = height + "px";
       host.style.overflow = "auto";
     }
+  }
+  function observePanelSize() {
+    var layout = document.querySelector(".layout");
+    if (!layout || !window.ResizeObserver) return;
+    var observer = new ResizeObserver(function (entries) {
+      if (entries[0] && entries[0].contentRect) fitPanel(entries[0].contentRect.width);
+    });
+    observer.observe(layout);
   }
   function render() {
     document.getElementById("crumb").textContent = names[state.view];
@@ -558,6 +580,7 @@
   function refresh() { return Promise.all([load("get_status", "status", state.status), load("list_sites", "sites", []), load("get_metrics", "metrics", state.metrics), load("get_cloudflare", "cloudflare", state.cloudflare)]); }
   render();
   fitPanel();
+  observePanelSize();
   window.addEventListener("resize", fitPanel);
   window.setTimeout(fitPanel, 50);
   refresh();

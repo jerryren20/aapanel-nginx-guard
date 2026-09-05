@@ -64,6 +64,13 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn('document.queryselector(".main") || document.body', ui)
         self.assertIn('class="ng-modal"', ui)
 
+    def test_panel_layout_reacts_to_the_embedded_container_width(self):
+        ui = (ROOT / "nginx_guard" / "index.html").read_text(encoding="utf-8").lower()
+        self.assertIn(".layout.narrow .sidebar { width: 64px; flex-basis: 64px; }", ui)
+        self.assertIn("new resizeobserver", ui)
+        self.assertIn("entries[0].contentrect.width", ui)
+        self.assertIn('layout.classlist.toggle("narrow", width < 760)', ui)
+
     def test_install_does_not_register_an_external_service(self):
         install = (ROOT / "nginx_guard" / "install.sh").read_text(encoding="utf-8")
         uninstall = (ROOT / "nginx_guard" / "uninstall.sh").read_text(encoding="utf-8")
