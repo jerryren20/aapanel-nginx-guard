@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nginx Guard - aaPanel</title>
+  <style>
+    :root {
+      --brand: #20a53a;
+      --brand-dark: #1b9130;
+      --brand-soft: #eef8f0;
+      --brand-pale: #f6fbf7;
+      --ink: #253238;
+      --muted: #839096;
+      --line: #e7ece9;
+      --panel: #fff;
+      --bg: #f5f7f6;
+      --danger: #e45757;
+      --warn: #d48a16;
+      --shadow: 0 5px 18px rgba(35, 65, 45, .06);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--bg); font: 13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",Arial,sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: 218px; flex: 0 0 218px; background: #fff; border-right: 1px solid var(--line); }
+    .brand { height: 65px; display: flex; align-items: center; gap: 10px; padding: 0 21px; border-bottom: 1px solid var(--line); font-size: 17px; font-weight: 700; }
+    .shield { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: var(--brand); font-weight: 800; }
+    .brand small { display: block; color: var(--muted); font-size: 10px; font-weight: 400; }
+    .nav { padding: 15px 10px; }
+    .nav-title { color: #a5afb0; padding: 10px 12px 6px; font-size: 11px; }
+    .nav button { width: 100%; display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 0; border-radius: 6px; color: #677477; background: transparent; text-align: left; }
+    .nav button:hover, .nav button.active { color: var(--brand-dark); background: var(--brand-soft); }
+    .nav .ico { width: 18px; text-align: center; color: currentColor; font-size: 15px; }
+    .main { min-width: 0; flex: 1; position: relative; }
+    .topbar { height: 65px; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; background: #fff; border-bottom: 1px solid var(--line); }
+    .crumb { color: #889294; }
+    .crumb strong { color: var(--ink); font-weight: 600; }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid #cde9d2; border-radius: 20px; color: var(--brand-dark); background: var(--brand-soft); }
+    .status.pending { border-color: #f1dfad; color: #80631a; background: #fffaf0; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
+    .dot.off { background: #adb7b8; }
+    .dot.pending { background: var(--warn); }
+    .btn { border: 1px solid #d9e2dd; border-radius: 5px; padding: 7px 14px; color: #5e6b6d; background: #fff; }
+    .btn:hover { border-color: var(--brand); color: var(--brand-dark); }
+    .btn.primary { border-color: var(--brand); color: #fff; background: var(--brand); }
+    .btn.primary:hover { background: var(--brand-dark); }
+    .btn.danger { color: var(--danger); border-color: #f0caca; }
+    .content { padding: 25px 28px 40px; }
+    .view-title { display: flex; align-items: end; justify-content: space-between; margin-bottom: 20px; }
+    h1 { margin: 0; font-size: 21px; font-weight: 600; }
+    h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+    .sub { color: var(--muted); margin-top: 4px; }
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--shadow); }
+    .metric { padding: 17px 18px; }
+    .metric .label { color: var(--muted); }
+    .metric .value { margin: 8px 0 2px; font-size: 25px; font-weight: 600; }
+    .metric .hint { color: var(--brand-dark); font-size: 11px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, .85fr); gap: 15px; margin-top: 15px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    .card-body { padding: 18px; }
+    .bars { height: 178px; display: flex; align-items: end; gap: 9px; padding: 18px 5px 24px; border-bottom: 1px solid var(--line); }
+    .bar-col { height: 100%; flex: 1; display: flex; align-items: end; gap: 3px; }
+    .bar { flex: 1; min-height: 0; border-radius: 3px 3px 0 0; background: #75bd8a; }
+    .bar.attack { background: var(--danger); }
+    .bar-labels { display: flex; justify-content: space-between; padding: 7px 5px 0; color: var(--muted); font-size: 11px; }
+    .summary-list { display: grid; gap: 13px; }
+    .summary-row { display: flex; align-items: center; justify-content: space-between; }
+    .summary-row span:first-child { color: var(--muted); }
+    .summary-row strong { font-weight: 600; }
+    .progress { height: 7px; margin-top: 7px; overflow: hidden; border-radius: 5px; background: #edf2ee; }
+    .progress i { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
+    .table-wrap { overflow: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { color: #8d9899; background: #fafcfb; font-weight: 500; text-align: left; white-space: nowrap; }
+    th, td { padding: 12px 15px; border-bottom: 1px solid var(--line); }
+    tr:last-child td { border-bottom: 0; }
+    .site-name { color: var(--ink); font-weight: 600; }
+    .site-id { color: var(--muted); font-size: 11px; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; color: #697678; background: #eff3f1; font-size: 11px; }
+    .tag.green { color: var(--brand-dark); background: var(--brand-soft); }
+    .tag.orange { color: #9b690f; background: #fff6df; }
+    .tag.red { color: #b44444; background: #fff0f0; }
+    .tag.request { color: var(--brand-dark); background: var(--brand-soft); }
+    .tag.attack-tag { color: #b44444; background: #fff0f0; }
+    .empty { padding: 38px 18px; color: var(--muted); text-align: center; }
+    .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
+    .field { display: grid; gap: 5px; }
+    .field.full { grid-column: 1 / -1; }
+    label { color: #657275; }
+    input, select, textarea { width: 100%; border: 1px solid #dfe7e2; border-radius: 5px; padding: 8px 10px; color: var(--ink); background: #fff; outline: 0; }
+    input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(32,165,58,.1); }
+    textarea { min-height: 100px; resize: vertical; }
+    .inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .switch { position: relative; width: 37px; height: 20px; }
+    .switch input { display: none; }
+    .slider { position: absolute; inset: 0; border-radius: 12px; background: #c9d3ce; transition: .2s; }
+    .slider:before { content: ""; position: absolute; width: 16px; height: 16px; left: 2px; top: 2px; border-radius: 50%; background: #fff; transition: .2s; }
+    .switch input:checked + .slider { background: var(--brand); }
+    .switch input:checked + .slider:before { transform: translateX(17px); }
+    .notice { padding: 12px 14px; border: 1px solid #d5ecd8; border-radius: 5px; color: #377442; background: var(--brand-pale); }
+    .notice.warn { border-color: #f1dfad; color: #80631a; background: #fffaf0; }
+    .modal-mask { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; overflow: auto; background: rgba(31, 45, 38, .32); }
+    .ng-modal { width: min(660px, 100%); max-height: calc(100% - 40px); overflow: auto; background: #fff; border-radius: 8px; box-shadow: 0 14px 45px rgba(30, 50, 36, .2); }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+    .modal-body { padding: 20px; }
+    .modal-foot { display: flex; justify-content: flex-end; gap: 9px; padding: 14px 20px; border-top: 1px solid var(--line); }
+    .toolbar { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+    .rule-card { display: grid; grid-template-columns: 1fr auto; gap: 15px; padding: 15px 18px; border-bottom: 1px solid var(--line); }
+    .rule-card:last-child { border-bottom: 0; }
+    .rule-meta { color: var(--muted); font-size: 11px; }
+    .rule-controls { min-width: 190px; justify-content: flex-end; }
+    .network-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 7px; margin-top: 10px; }
+    .network-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 5px; background: #fafcfb; font-family: ui-monospace,SFMono-Regular,Consolas,monospace; font-size: 11px; }
+    .network-item button { padding: 1px 5px; }
+    .help { color: var(--muted); font-size: 11px; }
+    .log-action { font-weight: 600; }
+    .log-action.block { color: var(--danger); }
+    .log-action.monitor { color: var(--warn); }
+    .toast { position: fixed; left: 50%; top: 50%; right: auto; bottom: auto; z-index: 5; display: none; min-width: 260px; max-width: min(520px, calc(100vw - 40px)); padding: 11px 16px; border: 1px solid #cde9d2; border-radius: 5px; color: #266c32; background: #fff; box-shadow: 0 8px 28px rgba(30, 50, 36, .16); text-align: center; transform: translate(-50%, -50%); }
+    .toast.error { border-color: #f0b6b6; color: #c93636; background: #fff5f5; }
+    .toast.show { display: block; }
+    .layout.compact .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .layout.compact .grid { grid-template-columns: 1fr; }
+    .layout.compact .topbar, .layout.compact .content { padding-left: 16px; padding-right: 16px; }
+    .layout.tiny .sidebar { width: 64px; flex-basis: 64px; }
+    .layout.tiny .brand { padding: 0; justify-content: center; }
+    .layout.tiny .brand-text, .layout.tiny .nav-title, .layout.tiny .nav button span { display: none; }
+    .layout.tiny .nav button { justify-content: center; padding: 11px 0; }
+    .layout.tiny .cards, .layout.tiny .form-grid { grid-template-columns: 1fr; }
+    .layout.tiny .top-actions .status { display: none; }
+    @media (max-width: 980px) { .sidebar { width: 64px; flex-basis: 64px; } .brand { padding: 0; justify-content: center; } .brand-text, .nav-title, .nav button span { display: none; } .nav button { justify-content: center; padding: 11px 0; } .topbar, .content { padding-left: 18px; padding-right: 18px; } .cards { grid-template-columns: repeat(2, 1fr); } .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 580px) { .cards, .form-grid { grid-template-columns: 1fr; } .top-actions .btn { padding-left: 8px; padding-right: 8px; } .content { padding-top: 17px; } }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><div class="shield">NG</div><div class="brand-text">Nginx Guard<small>aaPanel 轻量 WAF</small></div></div>
+    <nav class="nav">
+      <div class="nav-title">防护中心</div>
+      <button class="active" data-view="overview"><i class="ico">▦</i><span>概览</span></button>
+      <button data-view="sites"><i class="ico">◇</i><span>网站防护</span></button>
+      <button data-view="rules"><i class="ico">✓</i><span>规则管理</span></button>
+      <button data-view="ip"><i class="ico">⊙</i><span>IP 管理</span></button>
+      <button data-view="logs"><i class="ico">≡</i><span>攻击日志</span></button>
+      <div class="nav-title">系统</div>
+      <button data-view="cloudflare"><i class="ico">☁</i><span>Cloudflare</span></button>
+      <button data-view="backups"><i class="ico">◫</i><span>备份与恢复</span></button>
+      <button data-view="diagnostics"><i class="ico">ⓘ</i><span>诊断</span></button>
+    </nav>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="crumb">插件 / <strong id="crumb">概览</strong></div>
+      <div class="top-actions"><span class="status" id="status-badge"><i class="dot off" id="status-dot"></i><span id="status-text">检测中</span></span><button class="btn primary" id="apply-btn">应用配置</button></div>
+    </header>
+    <section class="content" id="content"></section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+(function () {
+  "use strict";
+  var API = "/plugin?action=a&name=nginx_guard&s=";
+  var state = {
+    view: "overview",
+    status: { engine_enabled: false, preferred_engine: "auto", lua_available: false, wiring_active: false },
+    metrics: { total: 0, blocked: 0, by_site: {}, by_rule: {} },
+    sites: [],
+    rules: { builtin: [], custom: [] },
+    selectedSite: "",
+    cloudflare: { enabled: false, official_networks: [], manual_networks: [], networks: [], updated_at: 0 },
+    cloudflareLookup: { address: "", result: null },
+    logs: [],
+    logSite: "",
+    logFilter: "all",
+    backups: []
+  };
+  var names = { overview: "概览", sites: "网站防护", rules: "规则管理", ip: "IP 管理", logs: "攻击日志", cloudflare: "Cloudflare", backups: "备份与恢复", diagnostics: "诊断" };
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[c]; });
+  }
+  function formatTime(value) {
+    var text = String(value == null ? "" : value);
+    var iso = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/);
+    return iso ? iso[1] + " " + iso[2] : text.replace(/^([0-9]{4}-[0-9]{2}-[0-9]{2})[ T]([0-9]{2}:[0-9]{2}:[0-9]{2}).*$/, "$1 $2");
+  }
+  function errorText(value) {
+    var raw = value;
+    if (raw && typeof raw === "object") raw = raw.msg || raw.message || raw.error;
+    var text = String(raw == null ? "" : raw).trim();
+    var known = {
+      INIT_CSRF_ERR: "aaPanel 请求校验失败，请刷新页面后重试",
+      INIT_SESSION_ERR: "aaPanel 登录状态已失效，请重新登录",
+      "Permission denied": "权限不足，请使用管理员账号操作",
+      "nginx.conf does not contain a http block": "Nginx 主配置文件中未找到 http 配置块，请检查配置格式",
+      "nginx.conf does not contain an http block": "Nginx 主配置文件中未找到 http 配置块，请检查配置格式",
+      "nginx.conf has an unclosed http block": "Nginx 主配置文件的 http 配置块未闭合，请检查配置",
+      "未找到可修改的 http 配置块": "未找到可修改的 Nginx http 配置块，请检查主配置及 include 文件",
+      "vhost does not contain a server block": "站点配置文件中未找到 server 配置块，请检查站点配置",
+      "vhost file not found for site": "未找到站点配置文件，请检查站点是否为 Node 项目或 vhost 文件是否存在"
+    };
+    var knownKey = null;
+    Object.keys(known).some(function (key) { if (text.indexOf(key) >= 0) { knownKey = key; return true; } return false; });
+    return (knownKey ? known[knownKey] : text) || "接口请求失败，请稍后重试";
+  }
+  function toast(message, isError) {
+    var node = document.getElementById("toast");
+    node.textContent = errorText(message);
+    node.classList.toggle("error", !!isError);
+    node.classList.add("show");
+    window.clearTimeout(toast.timer);
+    toast.timer = window.setTimeout(function () { node.classList.remove("show"); }, 3300);
+  }
+  function formValues(data) {
+    var form = {};
+    Object.keys(data || {}).forEach(function (key) { form[key] = typeof data[key] === "object" ? JSON.stringify(data[key]) : String(data[key]); });
+    return form;
+  }
+  function parseInterfaceWhitelist(value) {
+    return String(value || "").split(/\r?\n/).map(function (line) {
+      var parts = line.trim().split(/\s+/);
+      if (!parts[0]) return null;
+      if (/^https?:\/\//i.test(parts[0])) return { match: "prefix", url: parts[0] };
+      return parts.length >= 2 ? { match: parts[0].toLowerCase(), url: parts[1] } : null;
+    }).filter(Boolean);
+  }
+  function payload(data) {
+    var form = new URLSearchParams();
+    var values = formValues(data);
+    Object.keys(values).forEach(function (key) { form.set(key, values[key]); });
+    return form;
+  }
+  function panelUrl(path) {
+    var match = window.location.pathname.match(/^\/(apsess_[^/]+)/);
+    return (match ? "/" + match[1] : "") + path;
+  }
+  function requestHeaders() {
+    var headers = { "X-Requested-With": "XMLHttpRequest" };
+    var tokenNode = document.getElementById("request_token_head");
+    var httpToken = tokenNode && tokenNode.getAttribute("token");
+    if (httpToken) headers["x-http-token"] = httpToken;
+    var cookie = typeof document.cookie === "string" ? document.cookie : "";
+    var cookieMatch = cookie.match(/(?:^|;\s*)request_token=([^;]*)/);
+    if (cookieMatch) headers["x-cookie-token"] = decodeURIComponent(cookieMatch[1]);
+    return headers;
+  }
+  function unwrapResponse(res) {
+    if (!res || res.status === false) throw new Error(errorText(res));
+    return res.data == null ? res : res.data;
+  }
+  function xhrError(xhr) {
+    var raw = xhr && (xhr.responseJSON || xhr.responseText);
+    if (typeof raw === "string") {
+      try { raw = JSON.parse(raw); } catch (ignore) {}
+    }
+    return new Error(errorText(raw || ("HTTP " + ((xhr && xhr.status) || 0))));
+  }
+  function post(method, data) {
+    var url = panelUrl(API + encodeURIComponent(method));
+    if (method === "save_site_policy" && data && data.policy && document.getElementById("edit-interface")) {
+      data = Object.assign({}, data, { policy: Object.assign({}, data.policy, { interface_whitelist: parseInterfaceWhitelist(document.getElementById("edit-interface").value) }) });
+    }
+    var jq = window.jQuery || window.$;
+    if (jq && typeof jq.ajax === "function") {
+      return new Promise(function (resolve, reject) {
+        var request;
+        try {
+          request = jq.ajax({
+            url: url,
+            method: "POST",
+            data: formValues(data || {}),
+            dataType: "json",
+            headers: requestHeaders()
+          });
+        }
+        catch (error) { reject(new Error(errorText(error && error.message))); return; }
+        request.done(function (res) { try { resolve(unwrapResponse(res)); } catch (error) { reject(error); } });
+        request.fail(function (xhr) { reject(xhrError(xhr)); });
+      });
+    }
+    return fetch(url, { method: "POST", credentials: "same-origin", headers: Object.assign({ "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" }, requestHeaders()), body: payload(data || {}) })
+      .then(function (res) { return res.text().then(function (body) { var result; try { result = body ? JSON.parse(body) : {}; } catch (ignore) { throw new Error(errorText(body || ("HTTP " + res.status))); } if (!res.ok) throw new Error(errorText(result)); return unwrapResponse(result); }); });
+  }
+  function load(method, target, fallback) {
+    return post(method).then(function (data) { state[target] = data; render(); return data; }).catch(function (error) { if (fallback !== undefined) state[target] = fallback; render(); toast(error.message, true); return null; });
+  }
+  function card(label, value, hint) { return '<div class="card metric"><div class="label">' + esc(label) + '</div><div class="value">' + esc(value) + '</div><div class="hint">' + esc(hint || "—") + '</div></div>'; }
+  function header(title, sub, actions) { return '<div class="view-title"><div><h1>' + esc(title) + '</h1><div class="sub">' + esc(sub || "") + '</div></div><div class="toolbar">' + (actions || "") + '</div></div>'; }
+  function modeLabel(mode) { var value = String(mode || "OFF").toUpperCase(); return { OFF: "未启用", MONITOR: "监控", BLOCK: "拦截" }[value] || value; }
+  function statusTag(mode) { var value = String(mode || "OFF").toUpperCase(); var cls = value === "BLOCK" ? "red" : (value === "MONITOR" ? "orange" : ""); return '<span class="tag ' + cls + '" title="' + esc(value) + '">' + esc(modeLabel(value)) + '</span>'; }
+  function ruleSeverity(value) { return { high: "高", medium: "中", low: "低" }[String(value || "").toLowerCase()] || value || "中"; }
+  function ruleAction(value) { return { block: "拦截", monitor: "监控", allow: "放行", "404": "返回 404", "429": "限流 429", "444": "关闭连接" }[String(value || "").toLowerCase()] || value || "监控"; }
+  function ruleMatch(value) { return { uri_contains: "URI 包含", uri_regex: "URI 正则", query_contains: "查询参数包含", method: "请求方法", ip: "客户端 IP", user_agent: "User-Agent", host: "主机名", header: "请求头" }[String(value || "").toLowerCase()] || value || "未指定"; }
+  function customRuleDescription(rule) { var parts = []; if (rule.match) parts.push("匹配类型：" + ruleMatch(rule.match)); if (rule.header) parts.push("请求头：" + rule.header); if (rule.pattern) parts.push("匹配内容：" + rule.pattern); return parts.join("；") || "未填写规则说明"; }
+  function overview() {
+    var m = state.metrics || {};
+    var active = state.sites.filter(function (s) { return s.mode && s.mode !== "OFF"; }).length;
+    var wiringPending = state.status.engine_enabled && !state.status.wiring_active;
+    var wiringLabel = state.status.wiring_active ? "已接入" : (wiringPending ? "待应用" : "未接入");
+    var wiringClass = state.status.wiring_active ? "green" : (wiringPending ? "orange" : "");
+    var hourly = Array.isArray(m.hourly) ? m.hourly : [];
+    var buckets = [];
+    var maxValue = 1;
+    for (var b = 0; b < 24; b++) {
+      var bucket = hourly[b] || {};
+      var requests = Math.max(0, Number(bucket.requests) || 0);
+      var attacks = Math.max(0, Number(bucket.attacks) || 0);
+      buckets.push({ requests: requests, attacks: attacks });
+      maxValue = Math.max(maxValue, requests, attacks);
+    }
+    var bars = "";
+    for (var i = 0; i < 24; i++) {
+      var requestHeight = buckets[i].requests ? Math.max(4, Math.round(buckets[i].requests / maxValue * 100)) : 0;
+      var attackHeight = buckets[i].attacks ? Math.max(4, Math.round(buckets[i].attacks / maxValue * 100)) : 0;
+      bars += '<div class="bar-col" title="请求 ' + buckets[i].requests + '，攻击 ' + buckets[i].attacks + '"><i class="bar request" style="height:' + requestHeight + '%"></i><i class="bar attack" style="height:' + attackHeight + '%"></i></div>';
+    }
+    return header("概览", "按站点启用的轻量级 Nginx 防护，默认不改动后端应用") +
+      '<div class="cards">' + card("今日请求", m.total || 0, "来自 Nginx 缓冲日志") + card("今日拦截", m.blocked || 0, "高置信度规则") + card("受保护网站", active, "Monitor / Block") + card("Lua 能力", state.status.lua_available ? "可用" : "Native", state.status.lua_available ? "可选运行时" : "原生降级") + '</div>' +
+      '<div class="grid"><div class="card"><div class="card-head"><h2>最近 24 小时趋势</h2><div class="toolbar"><span class="tag request">请求</span><span class="tag attack-tag">攻击</span></div></div><div class="card-body"><div class="bars">' + bars + '</div><div class="bar-labels"><span>24 小时前</span><span>12 小时前</span><span>现在</span></div></div></div>' +
+      '<div class="card"><div class="card-head"><h2>运行状态</h2><span class="tag ' + wiringClass + '">' + wiringLabel + '</span></div><div class="card-body"><div class="summary-list"><div><div class="summary-row"><span>引擎状态</span><strong>' + (state.status.engine_enabled ? "已启用" : "未启用") + '</strong></div><div class="progress"><i style="width:' + (state.status.engine_enabled ? "100" : "0") + '%"></i></div></div><div class="summary-row"><span>首选引擎</span><strong>' + esc(state.status.preferred_engine || "auto") + '</strong></div><div class="summary-row"><span>运行时异常策略</span><strong title="仅表示 Lua 或运行时异常时放行请求，不代表当前发生错误">异常放行</strong></div><div class="summary-row"><span>配置变更</span><strong>保存后手动应用</strong></div><button class="btn ' + (state.status.engine_enabled ? "danger" : "primary") + '" data-toggle-engine>' + (state.status.engine_enabled ? "停用引擎" : "启用引擎") + '</button></div></div></div></div>' +
+      '<div class="notice ' + (wiringPending ? "warn" : "") + '" style="margin-top:15px">' + (wiringPending ? '引擎已启用，但 Nginx 尚未接入；请点击右上角“应用配置”完成检查、写入和 reload。' : 'aaPanel 直配：不安装独立服务或定时任务；保存配置后点击“应用配置”才写入 Nginx。') + ' Native 负责元数据规则和 CC；检测到 Lua 时仅检查最多 1 MB 的文本请求体，不创建新的 location、不使用响应过滤器；WebSocket / SSE / proxy_pass 由原有站点 location 继续处理。</div>';
+  }
+  function sitesView() {
+    var rows = state.sites.map(function (site) { return '<tr><td><div class="site-name">' + esc(site.name || site.id) + '</div><div class="site-id">ID ' + esc(site.id) + '</div></td><td>' + esc(site.type || "Site") + '</td><td>' + statusTag(site.mode) + '</td><td>' + esc(site.engine || "auto") + '</td><td>' + esc(site.rate || 5) + ' req/s</td><td><button class="btn" data-edit-site="' + esc(site.id) + '">配置</button></td></tr>'; }).join("");
+    if (!rows) rows = '<tr><td colspan="6"><div class="empty">暂未读取到 aaPanel 网站列表。确认插件运行在 aaPanel 后刷新。</div></td></tr>';
+    return header("网站防护", "每个站点独立配置：未启用 / 监控 / 拦截") + '<div class="card"><div class="card-head"><h2>aaPanel 网站</h2><button class="btn" data-refresh>刷新</button></div><div class="table-wrap"><table><thead><tr><th>域名</th><th>类型</th><th>防护模式</th><th>引擎</th><th>CC 速率</th><th>操作</th></tr></thead><tbody>' + rows + '</tbody></table></div></div><div class="card" style="margin-top:15px"><div class="card-body"><div class="notice">站点显示“未启用”时不会拦截请求；保存站点配置只写入期望配置，点击右上角“应用配置”才会执行 backup → nginx -t → reload。</div></div></div>';
+  }
+  function rulesView() {
+    var rules = [].concat(state.rules.builtin || [], state.rules.custom || []);
+    var body = rules.map(function (rule) {
+      var builtin = rule.id && String(rule.id).indexOf("NG") === 0;
+      var highRisk = rule.high_risk === true || ["NG1001", "NG1002", "NG1003"].indexOf(String(rule.id)) >= 0;
+      var actionControl = "";
+      if (builtin && !highRisk) {
+        actionControl = '<select class="rule-action" data-rule-action="' + esc(rule.id) + '" data-rule-enabled="' + (rule.enabled === false ? "false" : "true") + '"><option value="block" ' + (String(rule.action).toLowerCase() === "block" ? "selected" : "") + '>拦截（403）</option><option value="monitor" ' + (String(rule.action).toLowerCase() === "monitor" ? "selected" : "") + '>仅监控</option></select>';
+      } else if (highRisk) {
+        actionControl = '<span class="tag red">高风险固定拦截</span>';
+      }
+      var toggle = builtin ? '<button class="btn" data-toggle-rule="' + esc(rule.id) + '" data-rule-enabled="' + (rule.enabled === false ? "true" : "false") + '"' + (highRisk ? ' title="高风险规则建议保持启用"' : "") + '>' + (rule.enabled === false ? "启用" : "停用") + '</button>' : "";
+      return '<div class="rule-card"><div><div><strong>' + esc(rule.id) + '</strong>　' + esc(rule.name || "自定义规则") + '　<span class="tag ' + (rule.severity === "high" ? "red" : "orange") + '">' + esc(ruleSeverity(rule.severity)) + '</span></div><div class="rule-meta">' + esc(rule.category || "自定义") + ' · ' + esc(rule.description || customRuleDescription(rule)) + '</div></div><div class="toolbar rule-controls">' + actionControl + '<span class="tag ' + (rule.enabled === false ? "" : "green") + '">' + (rule.enabled === false ? "已停用" : esc(ruleAction(rule.action))) + '</span>' + toggle + '</div></div>';
+    }).join("");
+    if (!body) body = '<div class="empty">暂无规则数据</div>';
+    return header("规则管理", "高风险规则固定拦截；NG2001 / NG2002 / NG2003 默认拦截，可切换为仅监控", '<button class="btn primary" data-add-rule>新增自定义规则</button>') + '<div class="card"><div class="card-head"><h2>内置与自定义规则</h2><span class="tag green">' + rules.length + ' 条</span></div>' + body + '</div>';
+  }
+  function siteOptions() { return state.sites.map(function (s) { return '<option value="' + esc(s.id) + '">' + esc(s.name || s.id) + '</option>'; }).join(""); }
+  function mountModal(mask) {
+    document.querySelectorAll(".modal-mask").forEach(function (node) { node.remove(); });
+    (document.querySelector(".main") || document.body).appendChild(mask);
+  }
+  function openSiteEditor(id) {
+    var site = state.sites.find(function (item) { return String(item.id) === String(id); }) || { id: id };
+    var fallback = { mode: site.mode || "MONITOR", engine: site.engine || "auto", rate_limit: site.rate || 5, burst: 20, streaming_paths: site.streaming_paths || [], rate_paths: [], auto_ban: { enabled: true, threshold: 20, window: 10, duration: 600 } };
+    post("get_site_policy", { site_id: id }).then(function (policy) { showSiteEditor(id, policy || fallback); }).catch(function (error) { toast(error.message, true); showSiteEditor(id, fallback); });
+  }
+  function openRuleEditor() {
+    var mask = document.createElement("div");
+    mask.className = "modal-mask";
+    mask.innerHTML = '<div class="ng-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>新增自定义规则</h2><div class="sub">只保存经过后端校验的有限规则</div></div><button class="btn" data-close-modal>关闭</button></div><div class="modal-body"><div class="form-grid"><div class="field"><label>规则 ID</label><input id="custom-id" placeholder="CUSTOM-001"></div><div class="field"><label>匹配类型</label><select id="custom-match"><option value="uri_contains">URI 包含</option><option value="uri_regex">URI 正则</option><option value="query_contains">查询参数包含</option><option value="method">请求方法</option><option value="ip">客户端 IP</option><option value="user_agent">User-Agent</option><option value="host">主机名</option><option value="header">请求头</option></select></div><div class="field"><label>请求头名称（请求头类型）</label><input id="custom-header" placeholder="x-requested-with"></div><div class="field"><label>动作</label><select id="custom-action"><option value="monitor">仅监控</option><option value="block">拦截（403）</option><option value="429">限流（429）</option><option value="444">关闭连接（444）</option><option value="404">返回未找到（404）</option><option value="allow">放行</option></select></div><div class="field full"><label>匹配内容</label><textarea id="custom-pattern" placeholder="例如 /admin 或 TRACE"></textarea></div></div></div><div class="modal-foot"><button class="btn" data-close-modal>取消</button><button class="btn primary" data-save-rule>保存规则</button></div></div>';
+    mountModal(mask);
+  }
+  function showSiteEditor(id, policy) {
+    var paths = (policy.streaming_paths || []).join("\n");
+    var ratePaths = (policy.rate_paths || []).map(function (item) { return [item.path, item.rate || 2, item.burst || 20].join(" "); }).join("\n");
+    var interfaceWhitelist = (policy.interface_whitelist || []).map(function (item) {
+      if (typeof item === "string") return item;
+      var url = item.url || ((item.host ? "https://" + item.host : "") + (item.port ? ":" + item.port : "") + (item.path || "/"));
+      return (item.match || "exact") + " " + url;
+    }).join("\n");
+    var ban = policy.auto_ban || {};
+    var mask = document.createElement("div");
+    mask.className = "modal-mask";
+    mask.innerHTML = '<div class="ng-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><h2>站点防护配置</h2><div class="sub">站点 ID ' + esc(id) + ' · 保存后再点击应用配置</div></div><button class="btn" data-close-modal>关闭</button></div><div class="modal-body"><div class="form-grid"><div class="field"><label>防护模式</label><select id="edit-mode"><option value="OFF">未启用（OFF）</option><option value="MONITOR">仅监控（MONITOR）</option><option value="BLOCK">拦截（BLOCK）</option></select></div><div class="field"><label>引擎</label><select id="edit-engine"><option value="auto">自动（有 Lua 则启用）</option><option value="native">原生规则（Native）</option><option value="lua">Lua（不可用时自动降级）</option></select></div><div class="field"><label>动态请求速率（req/s）</label><input id="edit-rate" type="number" min="1" max="1000"></div><div class="field"><label>突发容量（Burst）</label><input id="edit-burst" type="number" min="1" max="10000"></div><div class="field full"><label>WebSocket / SSE 路径（每行一个）</label><textarea id="edit-streaming" placeholder="/socket\n/events"></textarea><div class="sub">仅用于兼容声明和运行策略，不会创建新的 location。</div></div><div class="field full"><label>URL 独立限流（每行：路径 速率 突发容量）</label><textarea id="edit-rate-paths" placeholder="/wp-login.php 2 5\n/api/ 10 20"></textarea></div><div class="field full"><label class="inline"><span class="switch"><input id="edit-ban-enabled" type="checkbox"><i class="slider"></i></span>启用 Lua 临时自动封禁</label></div><div class="field"><label>触发次数 / 窗口秒数</label><div class="inline"><input id="edit-ban-threshold" type="number" min="5" max="1000"><input id="edit-ban-window" type="number" min="1" max="3600"></div></div><div class="field"><label>封禁时长（秒）</label><input id="edit-ban-duration" type="number" min="60" max="86400"></div></div></div><div class="modal-foot"><button class="btn" data-close-modal>取消</button><button class="btn primary" data-save-site="' + esc(id) + '">保存站点配置</button></div></div>';
+    mountModal(mask);
+    var interfaceField = document.createElement("div");
+    interfaceField.className = "field full";
+    interfaceField.innerHTML = '<label>接口白名单（每行：exact/prefix 完整 URL）</label><textarea id="edit-interface" placeholder="exact https://example.com/api/login&#10;prefix http://example.com/api/upload/&#10;https://example.com/ 代表该域名全部路径"></textarea><div class="help">忽略 http/https；根地址跳过普通规则、请求体检查和 CC，但 NG1001/NG1002/NG1003 仍拦截。查询参数和片段不参与匹配。</div>';
+    var streamField = document.getElementById("edit-streaming").parentElement;
+    streamField.parentElement.insertBefore(interfaceField, streamField);
+    document.getElementById("edit-mode").value = policy.mode || "MONITOR";
+    document.getElementById("edit-engine").value = policy.engine || "auto";
+    document.getElementById("edit-rate").value = policy.rate_limit || policy.rate || 5;
+    document.getElementById("edit-burst").value = policy.burst || 20;
+    document.getElementById("edit-interface").value = interfaceWhitelist;
+    document.getElementById("edit-streaming").value = paths;
+    document.getElementById("edit-rate-paths").value = ratePaths;
+    document.getElementById("edit-ban-enabled").checked = ban.enabled !== false;
+    document.getElementById("edit-ban-threshold").value = ban.threshold || 20;
+    document.getElementById("edit-ban-window").value = ban.window || 10;
+    document.getElementById("edit-ban-duration").value = ban.duration || 600;
+  }
+  function ipView() {
+    var selected = state.selectedSite || (state.sites[0] && state.sites[0].id) || "";
+    var site = state.sites.find(function (s) { return String(s.id) === String(selected); }) || {};
+    return header("IP 管理", "黑名单支持 IPv4 / IPv6 / CIDR；白名单不绕过高风险敏感文件、穿越和元数据 SSRF") +
+      '<div class="card"><div class="card-body"><div class="form-grid"><div class="field"><label>网站</label><select id="ip-site"><option value="">请选择网站</option>' + siteOptions() + '</select></div><div class="field"><label>新增地址</label><div class="inline"><input id="ip-value" placeholder="例如 1.2.3.0/24"><select id="ip-list"><option value="blacklist">黑名单</option><option value="whitelist">白名单</option></select><button class="btn primary" data-add-ip>添加</button></div></div></div><div id="ip-lists" style="margin-top:18px"><div class="empty">选择网站后加载列表</div></div></div></div>';
+  }
+  function logsView() {
+    var rows = state.logs.map(function (row) {
+      var action = String(row.action || "MONITOR").toUpperCase();
+      var blocked = row.blocked === true || ["BLOCK", "DENY", "RATE_LIMIT", "403", "404", "429", "444"].indexOf(action) >= 0;
+      var displayAction = action || (blocked ? "BLOCK" : "MONITOR");
+      return '<tr><td>' + esc(formatTime(row.time || "—")) + '</td><td>' + esc(row.cfip || "—") + '</td><td>' + esc(row.client_ip || row.remote_addr || "—") + '</td><td>' + esc(row.host || "—") + '<br><span class="help">' + esc(row.method || "GET") + ' ' + esc(row.uri || row.request || "—") + (row.query ? '?' + esc(row.query) : '') + '</span></td><td>' + esc(row.rule_id || "—") + '<br><span class="help">' + esc(row.rule_name || row.attack_type || "—") + '</span></td><td class="log-action ' + (blocked ? "block" : "monitor") + '">' + esc(displayAction) + '</td><td>' + esc(row.status || "—") + '<br><span class="help">' + esc(row.request_time || "—") + ' s</span></td></tr>';
+    }).join("");
+    if (!rows) rows = '<tr><td colspan="7"><div class="empty">暂无攻击日志</div></td></tr>';
+    return header("攻击日志", "时间格式：yyyy-MM-dd HH:mm:ss；查询前端只展示脱敏后的 query，Cookie、Authorization、Token 不落入列表") + '<div class="card"><div class="card-head"><h2>最近事件</h2><div class="toolbar"><select id="log-site"><option value="">请选择网站</option>' + siteOptions() + '</select><select id="log-filter"><option value="all">全部事件</option><option value="blocked">仅显示已拦截</option></select><button class="btn" data-load-logs>查询</button></div></div><div class="table-wrap"><table><thead><tr><th>时间</th><th>CFIP</th><th>客户端 IP</th><th>域名 / 请求</th><th>规则 / 攻击类型</th><th>动作</th><th>状态 / 耗时</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }
+  function cloudflareView() {
+    var official = state.cloudflare.official_networks || [];
+    var manual = state.cloudflare.manual_networks || [];
+    var effective = state.cloudflare.networks || [];
+    function networkItems(values, removable) { return (values || []).map(function (network) { return '<span class="network-item"><span>' + esc(network) + '</span>' + (removable ? '<button class="btn danger" data-remove-cf-network="' + esc(network) + '">删除</button>' : '') + '</span>'; }).join("") || '<span class="help">暂无</span>'; }
+    var lookup = state.cloudflareLookup || { address: "", result: null };
+    var lookupResult = lookup.result;
+    var lookupHtml = "";
+    if (lookupResult) {
+      if (lookupResult.matched) {
+        var matches = (lookupResult.matches || []).map(function (item) { return '<div class="summary-row"><span>' + esc(item.network) + '</span><strong>' + esc((item.sources || []).map(function (source) { return source === "official" ? "官方" : "手动"; }).join("、")) + '</strong></div>'; }).join("");
+        lookupHtml = '<div class="notice" style="margin-top:12px">' + esc(lookupResult.ip) + ' 属于当前 Cloudflare 生效网段</div><div class="summary-list" style="margin-top:12px">' + matches + '</div>';
+      } else {
+        lookupHtml = '<div class="notice warn" style="margin-top:12px">' + esc(lookupResult.ip) + ' 不属于当前 Cloudflare 生效网段</div>';
+      }
+    }
+    return header("Cloudflare", "只有请求 remote_addr 位于已保存网段时，才使用 CF-Connecting-IP") + '<div class="card"><div class="card-body"><div class="notice ' + (effective.length ? "" : "warn") + '">' + (effective.length ? "生效网段共 " + effective.length + " 个（官方 " + official.length + "，手动 " + manual.length + "，自动去重）。" : "尚未加载 Cloudflare 网段，插件不会盲目信任 CF-Connecting-IP。") + '</div><div class="form-grid" style="margin-top:18px"><div class="field"><label>真实 IP 解析</label><label class="inline"><span class="switch"><input type="checkbox" id="cf-enabled" ' + (state.cloudflare.enabled ? "checked" : "") + '><i class="slider"></i></span>启用 Cloudflare Real IP</label></div><div class="field"><label>更新时间</label><div>' + (state.cloudflare.updated_at ? formatTime(new Date(state.cloudflare.updated_at * 1000).toISOString()) : "未更新") + '</div></div></div><div class="field" style="margin-top:18px"><label>查询 IP 是否属于 Cloudflare 网段</label><div class="inline"><input id="cf-lookup-ip" value="' + esc(lookup.address || "") + '" placeholder="例如 104.16.0.1"><button class="btn" data-lookup-cf-ip>查询</button></div>' + lookupHtml + '<div class="help">只查询单个 IPv4 或 IPv6 地址，检查官方和手动生效网段；不会保存配置或 reload Nginx。</div></div><div class="field" style="margin-top:18px"><label>手动添加网段</label><div class="inline"><input id="cf-network" placeholder="例如 203.0.113.0/24 或 2001:db8::/32"><button class="btn primary" data-add-cf-network>添加</button></div><div class="help">手动网段不会被刷新官方网段覆盖。</div></div><div class="field" style="margin-top:18px"><label>官方网段（只读）</label><div class="network-list">' + networkItems(official, false) + '</div></div><div class="field" style="margin-top:18px"><label>手动网段</label><div class="network-list">' + networkItems(manual, true) + '</div></div><div class="toolbar" style="margin-top:18px"><button class="btn primary" data-save-cf>保存开关</button><button class="btn" data-refresh-cf>从官方地址更新网段</button></div></div></div>';
+  }
+  function backupsView() {
+    var body = state.backups.map(function (item) { return '<tr><td>' + esc(item.name) + '</td><td>' + esc(item.path) + '</td><td><button class="btn danger" data-restore-backup="' + esc(item.name) + '">恢复</button></td></tr>'; }).join("");
+    if (!body) body = '<tr><td colspan="3"><div class="empty">暂无事务备份。每次应用配置前会自动创建。</div></td></tr>';
+    return header("备份与恢复", "任何配置变更都先备份；nginx -t 失败会自动恢复原文件，最多保留最近 3 个备份") + '<div class="card"><div class="card-head"><h2>事务备份（最近 3 个）</h2><button class="btn" data-refresh-backups>刷新</button></div><div class="table-wrap"><table><thead><tr><th>时间 / 标识</th><th>目录</th><th>操作</th></tr></thead><tbody>' + body + '</tbody></table></div></div><div class="notice" style="margin-top:15px">日志自动清理：单文件最大 20 MB，最多保留 7 天，总量最大 100 MB；仅清理 Nginx Guard 自己的日志、生成配置和备份。</div><div class="notice warn" style="margin-top:15px">紧急情况下可 SSH 执行 <code>/www/server/nginx_guard/bin/disable.sh</code>，仅移除 Nginx Guard 自己的 marker。</div>';
+  }
+  function diagnosticsView() {
+    return header("诊断", "检查 Nginx 能力、路径和当前接入状态") + '<div class="card"><div class="card-body" id="diag-body"><div class="empty">加载中…</div></div></div>';
+  }
+  function diagnosticLabel(key) { return { python: "Python 版本", nginx_conf: "Nginx 主配置文件", http_config: "http 配置块所在文件", http_block_found: "http 配置块检查", vhost_dir: "站点配置目录", data_root: "插件数据目录", lua_available: "Lua 模块", real_ip_available: "Real IP 模块", config_writable: "配置目录可写" }[key] || key; }
+  function diagnosticValue(key, value) {
+    if (key === "lua_available") return value ? "已检测到" : "未检测到（使用 Native 原生引擎）";
+    if (key === "real_ip_available") return value ? "已检测到" : "未检测到（CFIP 不启用）";
+    if (key === "http_block_found") return value ? "已找到" : "未找到";
+    if (key === "config_writable") return value ? "是" : "否";
+    return value;
+  }
+  function fitPanel() {
+    var layout = document.querySelector(".layout");
+    if (!layout) return;
+    var width = layout.getBoundingClientRect().width;
+    layout.classList.toggle("compact", width < 920);
+    layout.classList.toggle("tiny", width < 560);
+    var host = layout.parentElement;
+    if (!host || host === document.body) return;
+    var hostRect = host.getBoundingClientRect();
+    var layoutRect = layout.getBoundingClientRect();
+    var available = host.clientHeight - Math.max(layoutRect.top - hostRect.top, 0);
+    if (available > 0) {
+      var height = Math.max(available, 420);
+      layout.style.height = height + "px";
+      layout.style.minHeight = height + "px";
+      host.style.overflow = "auto";
+    }
+  }
+  function render() {
+    document.getElementById("crumb").textContent = names[state.view];
+    document.querySelectorAll(".nav button").forEach(function (node) { node.classList.toggle("active", node.getAttribute("data-view") === state.view); });
+    var views = { overview: overview, sites: sitesView, rules: rulesView, ip: ipView, logs: logsView, cloudflare: cloudflareView, backups: backupsView, diagnostics: diagnosticsView };
+    document.getElementById("content").innerHTML = views[state.view]();
+    var statusDot = document.getElementById("status-dot");
+    var pending = state.status.engine_enabled && !state.status.wiring_active;
+    statusDot.classList.toggle("off", !state.status.engine_enabled);
+    statusDot.classList.toggle("pending", pending);
+    document.getElementById("status-badge").classList.toggle("pending", pending);
+    document.getElementById("status-text").textContent = !state.status.engine_enabled ? "引擎未启用" : (pending ? "已启用，待应用" : "防护已启用");
+    if (state.view === "ip") { var select = document.getElementById("ip-site"); if (select) { select.value = state.selectedSite || (state.sites[0] && state.sites[0].id) || ""; if (select.value) loadIp(select.value); } }
+    if (state.view === "logs") { var logSite = document.getElementById("log-site"); var logFilter = document.getElementById("log-filter"); if (logSite) logSite.value = state.logSite || ""; if (logFilter) logFilter.value = state.logFilter || "all"; }
+    if (state.view === "diagnostics") { post("diagnostics").then(function (data) { var html = Object.keys(data || {}).map(function (key) { return '<div class="summary-row"><span>' + esc(diagnosticLabel(key)) + '</span><strong>' + esc(diagnosticValue(key, data[key])) + '</strong></div>'; }).join(""); var luaNote = data && data.lua_available ? '<div class="notice" style="margin-top:15px">已检测到 Lua 模块：Native 负责元数据规则和 CC，Lua 仅检查最多 1 MB 的文本请求体；不会修改原站点 proxy、Upgrade、Connection、缓存或响应。</div>' : '<div class="notice warn" style="margin-top:15px">当前 Nginx 未检测到 Lua 模块，插件会安全使用 Native 原生引擎：敏感文件、路径穿越、云元数据、SQL 注入、XSS、扫描器 User-Agent 和 CC 仍可防护，但请求体检查不可用。若要启用请求体检查，需要安装带 http_lua_module 的 Nginx 或 OpenResty；插件不会自动重装 Nginx，以免影响现有站点。</div>'; var node = document.getElementById("diag-body"); if (node) node.innerHTML = '<div class="summary-list">' + html + '</div>' + luaNote; }).catch(function (error) { toast(error.message, true); }); }
+  }
+  function loadIp(siteId) {
+    state.selectedSite = siteId;
+    post("get_ip_lists", { site_id: siteId }).then(function (data) {
+      var node = document.getElementById("ip-lists"); if (!node) return;
+      function list(name, title) { return '<div style="margin-top:14px"><h3>' + title + ' <span class="tag">' + ((data[name] || []).length) + '</span></h3><div class="inline">' + ((data[name] || []).map(function (ip) { return '<span class="tag">' + esc(ip) + '</span>'; }).join("") || '<span class="sub">暂无</span>') + '</div></div>'; }
+      node.innerHTML = list("blacklist", "黑名单") + list("whitelist", "白名单");
+    }).catch(function (error) { toast(error.message, true); });
+  }
+  document.addEventListener("click", function (event) {
+    var view = event.target.closest("[data-view]"); if (view) { state.view = view.getAttribute("data-view"); render(); if (state.view === "sites") load("list_sites", "sites", []); if (state.view === "rules") load("get_rules", "rules", { builtin: [], custom: [] }); if (state.view === "backups") load("get_backups", "backups", []); return; }
+    if (event.target.closest("#apply-btn")) { toast("正在执行 backup → nginx -t → reload…"); post("apply_config").then(function () { toast("配置已应用"); refresh(); }).catch(function (error) { toast(error.message, true); }); }
+    if (event.target.closest("[data-toggle-engine]")) { var enabled = !state.status.engine_enabled; post("save_global", { engine_enabled: enabled, preferred_engine: state.status.preferred_engine || "auto" }).then(function () { toast((enabled ? "引擎已启用" : "引擎已停用") + "，请点击应用配置"); refresh(); }).catch(function (error) { toast(error.message, true); }); }
+    if (event.target.closest("[data-add-rule]")) { openRuleEditor(); }
+    if (event.target.closest("[data-refresh]")) { load("list_sites", "sites", []); }
+    var toggleRule = event.target.closest("[data-toggle-rule]"); if (toggleRule) { post("save_rule", { rule_id: toggleRule.getAttribute("data-toggle-rule"), enabled: toggleRule.getAttribute("data-rule-enabled"), action: "block" }).then(function () { toast("规则状态已保存，请点击应用配置"); load("get_rules", "rules", { builtin: [], custom: [] }); }).catch(function (error) { toast(error.message, true); }); }
+    var edit = event.target.closest("[data-edit-site]"); if (edit) { openSiteEditor(edit.getAttribute("data-edit-site")); }
+    if (event.target.closest("[data-close-modal]")) { var modal = event.target.closest(".modal-mask"); if (modal) modal.remove(); }
+    var saveSite = event.target.closest("[data-save-site]"); if (saveSite) { var siteId = saveSite.getAttribute("data-save-site"); var ratePaths = document.getElementById("edit-rate-paths").value.split(/\r?\n/).map(function (v) { var parts = v.trim().split(/\s+/); return parts.length >= 1 && parts[0] ? { path: parts[0], rate: parts[1] || 2, burst: parts[2] || 20 } : null; }).filter(Boolean); var policy = { mode: document.getElementById("edit-mode").value, engine: document.getElementById("edit-engine").value, rate_limit: document.getElementById("edit-rate").value, burst: document.getElementById("edit-burst").value, streaming_paths: document.getElementById("edit-streaming").value.split(/\r?\n/).map(function (v) { return v.trim(); }).filter(Boolean), rate_paths: ratePaths, auto_ban: { enabled: document.getElementById("edit-ban-enabled").checked, threshold: document.getElementById("edit-ban-threshold").value, window: document.getElementById("edit-ban-window").value, duration: document.getElementById("edit-ban-duration").value } }; post("save_site_policy", { site_id: siteId, policy: policy }).then(function () { toast("站点配置已保存，请点击应用配置"); var modal = saveSite.closest(".modal-mask"); if (modal) modal.remove(); load("list_sites", "sites", []); }).catch(function (error) { toast(error.message, true); }); }
+    if (event.target.closest("[data-save-rule]")) { var customRule = { id: document.getElementById("custom-id").value.trim(), match: document.getElementById("custom-match").value, pattern: document.getElementById("custom-pattern").value, action: document.getElementById("custom-action").value, header: document.getElementById("custom-header").value.trim(), enabled: true }; post("save_custom_rule", { rule: customRule }).then(function () { toast("自定义规则已保存，请点击应用配置"); var ruleModal = event.target.closest(".modal-mask"); if (ruleModal) ruleModal.remove(); load("get_rules", "rules", { builtin: [], custom: [] }); }).catch(function (error) { toast(error.message, true); }); }
+    if (event.target.closest("[data-add-ip]")) { var sid = document.getElementById("ip-site").value; var val = document.getElementById("ip-value").value; var list = document.getElementById("ip-list").value; post("mutate_ip_list", { site_id: sid, list_name: list, operation: "add", address: val }).then(function () { toast("IP 已添加，请点击应用配置"); loadIp(sid); }).catch(function (error) { toast(error.message, true); }); }
+    if (event.target.closest("[data-load-logs]")) { var logSite = document.getElementById("log-site").value; var logFilter = document.getElementById("log-filter").value; state.logSite = logSite; state.logFilter = logFilter; if (logSite) post("get_logs", { site_id: logSite, blocked_only: logFilter === "blocked", limit: 100 }).then(function (data) { state.logs = data || []; render(); }).catch(function (error) { toast(error.message, true); }); else toast("请先选择网站", true); }
+    if (event.target.closest("[data-lookup-cf-ip]")) { var lookupInput = document.getElementById("cf-lookup-ip"); var address = lookupInput ? lookupInput.value.trim() : ""; state.cloudflareLookup.address = address; state.cloudflareLookup.result = null; post("lookup_cloudflare_ip", { address: address }).then(function (data) { state.cloudflareLookup.result = data || null; render(); }).catch(function (error) { render(); toast(error.message, true); }); }
+    if (event.target.closest("[data-save-cf]")) { var enabled = document.getElementById("cf-enabled").checked; post("save_global", { engine_enabled: state.status.engine_enabled, preferred_engine: state.status.preferred_engine }).then(function () { return post("save_cloudflare", { enabled: enabled }); }).then(function () { toast("Cloudflare 开关已保存，请点击应用配置"); }).catch(function (error) { toast(error && error.message ? error.message : "Cloudflare 配置保存失败", true); }); }
+    if (event.target.closest("[data-refresh-cf]")) { toast("正在从 Cloudflare 官方地址获取网段…"); post("refresh_cloudflare").then(function (data) { state.cloudflare = data; render(); toast("官方网段已更新"); }).catch(function (error) { toast(error.message, true); }); }
+    if (event.target.closest("[data-add-cf-network]")) { var network = document.getElementById("cf-network").value.trim(); post("mutate_cloudflare_network", { operation: "add", address: network }).then(function (data) { state.cloudflare = data; render(); toast("手动网段已添加，请点击应用配置"); }).catch(function (error) { toast(error.message, true); }); }
+    var removeNetwork = event.target.closest("[data-remove-cf-network]"); if (removeNetwork) { post("mutate_cloudflare_network", { operation: "remove", address: removeNetwork.getAttribute("data-remove-cf-network") }).then(function (data) { state.cloudflare = data; render(); toast("手动网段已删除，请点击应用配置"); }).catch(function (error) { toast(error.message, true); }); }
+    if (event.target.closest("[data-refresh-backups]")) { load("get_backups", "backups", []); }
+    var restore = event.target.closest("[data-restore-backup]"); if (restore) { var backup = restore.getAttribute("data-restore-backup"); if (window.confirm("恢复备份 " + backup + "？当前 Nginx 配置会被替换并重新检查。")) { toast("正在恢复备份…"); post("restore_backup", { backup: backup }).then(function () { toast("备份已恢复"); refresh(); }).catch(function (error) { toast(error.message, true); }); } }
+  });
+  document.addEventListener("change", function (event) { if (event.target.id === "ip-site") { state.selectedSite = event.target.value; loadIp(event.target.value); } if (event.target.id === "log-site") { state.logSite = event.target.value; } if (event.target.id === "log-filter") { state.logFilter = event.target.value; } var action = event.target.closest("[data-rule-action]"); if (action) { post("save_rule", { rule_id: action.getAttribute("data-rule-action"), enabled: action.getAttribute("data-rule-enabled"), action: action.value }).then(function () { toast("规则动作已保存，请点击应用配置"); load("get_rules", "rules", { builtin: [], custom: [] }); }).catch(function (error) { toast(error.message, true); }); } });
+  function refresh() { return Promise.all([load("get_status", "status", state.status), load("list_sites", "sites", []), load("get_metrics", "metrics", state.metrics), load("get_cloudflare", "cloudflare", state.cloudflare)]); }
+  render();
+  fitPanel();
+  window.addEventListener("resize", fitPanel);
+  window.setTimeout(fitPanel, 50);
+  refresh();
+}());
+</script>
+</body>
+</html>

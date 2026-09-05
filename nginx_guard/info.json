@@ -1,0 +1,16 @@
+{
+  "title": "Nginx Guard",
+  "name": "nginx_guard",
+  "type": "System Tools",
+  "ps": "Lightweight site-level Nginx WAF for aaPanel",
+  "versions": "1.0.13",
+  "version": "1.0.13",
+  "shell": "install.sh",
+  "checks": "/www/server/panel/plugin/nginx_guard",
+  "author": "Nginx Guard contributors",
+  "home": "",
+  "date": "2026-09-03",
+  "default": false,
+  "display": 0,
+  "price": 0
+}

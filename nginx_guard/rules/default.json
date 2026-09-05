@@ -1,0 +1,56 @@
+[
+  {
+    "id": "NG1001",
+    "name": "敏感文件暴露",
+    "description": "拦截常见环境变量、版本库、云凭据和备份文件。",
+    "category": "敏感文件",
+    "severity": "high",
+    "enabled": true,
+    "action": "block"
+  },
+  {
+    "id": "NG1002",
+    "name": "路径穿越",
+    "description": "拦截编码或明文的路径穿越，以及本地文件探测。",
+    "category": "路径穿越",
+    "severity": "high",
+    "enabled": true,
+    "action": "block"
+  },
+  {
+    "id": "NG1003",
+    "name": "云元数据 SSRF",
+    "description": "拦截云平台内网元数据地址和元数据路径探测。",
+    "category": "SSRF",
+    "severity": "high",
+    "enabled": true,
+    "action": "block"
+  },
+  {
+    "id": "NG2001",
+    "name": "SQL 注入特征",
+    "description": "拦截并记录常见 SQL 注入特征。",
+    "category": "SQL 注入",
+    "severity": "medium",
+    "enabled": true,
+    "action": "block"
+  },
+  {
+    "id": "NG2002",
+    "name": "XSS 特征",
+    "description": "拦截并记录常见脚本和事件处理器特征。",
+    "category": "XSS",
+    "severity": "medium",
+    "enabled": true,
+    "action": "block"
+  },
+  {
+    "id": "NG2003",
+    "name": "扫描器 User-Agent",
+    "description": "拦截并记录常见自动化扫描器的 User-Agent。",
+    "category": "扫描器",
+    "severity": "low",
+    "enabled": true,
+    "action": "block"
+  }
+]

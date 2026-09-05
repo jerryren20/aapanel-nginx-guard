@@ -1,0 +1,1147 @@
+<!--
+  PROTOTYPE ONLY
+  三种 aaPanel 风格的 Nginx Guard 配置界面，使用 ?variant=A|B|C 切换。
+  这是纯前端交互原型，不连接 aaPanel、不修改真实 Nginx、不持久化数据。
+-->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nginx Guard · aaPanel UI Prototype</title>
+  <style>
+    :root {
+      --primary: #20a7df;
+      --primary-dark: #147ca9;
+      --primary-soft: #e9f7fc;
+      --ink: #26333d;
+      --muted: #82909b;
+      --line: #e5eaee;
+      --bg: #f3f6f8;
+      --card: #ffffff;
+      --green: #22b573;
+      --green-soft: #e9f8f1;
+      --orange: #f39a35;
+      --orange-soft: #fff5e8;
+      --red: #e65757;
+      --red-soft: #fff0f0;
+      --purple: #7667db;
+      --shadow: 0 10px 28px rgba(40, 65, 83, .06);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+    }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid rgba(32, 167, 223, .35);
+      outline-offset: 2px;
+    }
+
+    .app-shell { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 218px;
+      flex: 0 0 218px;
+      color: #c4d0d8;
+      background: #202d36;
+      box-shadow: 5px 0 18px rgba(27, 44, 54, .08);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 64px;
+      padding: 0 20px;
+      color: #fff;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 29px;
+      height: 29px;
+      color: #fff;
+      background: linear-gradient(135deg, #25b8e9, #167aa7);
+      border-radius: 7px;
+      font-size: 15px;
+      font-weight: 700;
+      box-shadow: 0 4px 10px rgba(32,167,223,.25);
+    }
+    .brand-title { font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+    .brand-subtitle {
+      margin-top: 1px;
+      color: #8ea2ae;
+      font-size: 10px;
+      font-weight: 400;
+    }
+    .nav-caption {
+      padding: 24px 20px 8px;
+      color: #738792;
+      font-size: 11px;
+      letter-spacing: .08em;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      width: calc(100% - 18px);
+      height: 42px;
+      margin: 2px 9px;
+      padding: 0 12px;
+      color: #b8c7cf;
+      background: transparent;
+      border: 0;
+      border-radius: 6px;
+      text-align: left;
+      transition: .18s ease;
+    }
+    .nav-item:hover { color: #fff; background: rgba(255,255,255,.06); }
+    .nav-item.active {
+      color: #fff;
+      background: linear-gradient(90deg, rgba(32,167,223,.92), rgba(32,167,223,.68));
+      box-shadow: 0 6px 12px rgba(11, 103, 142, .22);
+    }
+    .nav-icon { width: 18px; color: #87a4b3; text-align: center; font-size: 15px; }
+    .nav-item.active .nav-icon { color: #fff; }
+    .nav-badge {
+      min-width: 19px;
+      margin-left: auto;
+      padding: 1px 6px;
+      color: #fff;
+      background: rgba(230,87,87,.9);
+      border-radius: 10px;
+      font-size: 11px;
+      text-align: center;
+    }
+    .sidebar-foot {
+      position: fixed;
+      bottom: 0;
+      width: 218px;
+      padding: 14px 20px 18px;
+      color: #80939e;
+      border-top: 1px solid rgba(255,255,255,.07);
+      font-size: 11px;
+    }
+    .sidebar-foot strong { display: block; color: #b8c8d0; font-weight: 500; }
+
+    .main { min-width: 0; flex: 1; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 64px;
+      padding: 0 28px;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+    }
+    .crumb { color: var(--muted); font-size: 13px; }
+    .crumb strong { color: var(--ink); font-weight: 600; }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .server-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      color: #6d7c86;
+      background: #f7f9fa;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      font-size: 12px;
+    }
+    .server-dot, .dot {
+      width: 7px;
+      height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 0 3px rgba(34,181,115,.11);
+    }
+    .engine-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 9px 5px 11px;
+      color: #5a6a74;
+      background: #fafcfd;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      font-size: 12px;
+    }
+    .toggle {
+      position: relative;
+      width: 32px;
+      height: 18px;
+      padding: 0;
+      background: #c6d0d6;
+      border: 0;
+      border-radius: 10px;
+      transition: .18s ease;
+    }
+    .toggle::after {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 12px;
+      height: 12px;
+      background: #fff;
+      border-radius: 50%;
+      content: "";
+      transition: .18s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle.on { background: var(--green); }
+    .toggle.on::after { left: 17px; }
+    .page-content { max-width: 1540px; margin: 0 auto; padding: 27px 30px 100px; }
+    .page-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+    .page-heading h1 {
+      margin: 0;
+      color: #24323b;
+      font-size: 21px;
+      font-weight: 600;
+      letter-spacing: -.01em;
+    }
+    .page-heading p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .heading-actions { display: flex; gap: 9px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 13px;
+      color: #60717c;
+      background: #fff;
+      border: 1px solid #dce4e9;
+      border-radius: 5px;
+      transition: .18s ease;
+    }
+    .btn:hover { color: var(--primary-dark); border-color: #a9d9e9; background: #fbfeff; }
+    .btn.primary { color: #fff; background: var(--primary); border-color: var(--primary); }
+    .btn.primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+    .btn.danger { color: var(--red); border-color: #f2c5c5; }
+    .btn.small { min-height: 29px; padding: 0 9px; font-size: 12px; }
+    .btn.ghost { border-color: transparent; background: transparent; }
+    .prototype-note {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 20px;
+      padding: 10px 13px;
+      color: #6e5b3d;
+      background: #fffaf0;
+      border: 1px solid #f4e0b6;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .prototype-note .note-icon { color: var(--orange); font-size: 16px; }
+    .card {
+      min-width: 0;
+      padding: 19px 20px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card-title { color: #34444e; font-size: 14px; font-weight: 600; }
+    .card-subtitle { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .muted { color: var(--muted); }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 15px;
+    }
+    .metric-card { position: relative; overflow: hidden; padding: 17px 18px; }
+    .metric-card::after {
+      position: absolute;
+      right: -14px;
+      bottom: -24px;
+      width: 88px;
+      height: 88px;
+      border: 12px solid rgba(32,167,223,.06);
+      border-radius: 50%;
+      content: "";
+    }
+    .metric-label { color: var(--muted); font-size: 12px; }
+    .metric-value { margin-top: 6px; color: #25343d; font-size: 25px; font-weight: 600; }
+    .metric-foot { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--muted); font-size: 11px; }
+    .up { color: var(--green); }
+    .down { color: var(--red); }
+    .metric-icon {
+      position: absolute;
+      top: 16px;
+      right: 18px;
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      border-radius: 7px;
+      font-size: 16px;
+    }
+    .classic-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(280px, .85fr);
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+    .classic-bottom {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(280px, .85fr);
+      gap: 15px;
+    }
+    .chart-wrap { height: 185px; padding: 10px 0 0; }
+    .chart {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      height: 135px;
+      padding: 0 8px;
+      border-bottom: 1px solid var(--line);
+      background: repeating-linear-gradient(to bottom, transparent 0, transparent 43px, #edf2f4 44px);
+    }
+    .chart-bar {
+      position: relative;
+      width: 18px;
+      min-height: 5px;
+      background: linear-gradient(180deg, #55c2e9, #1688b7);
+      border-radius: 4px 4px 0 0;
+    }
+    .chart-bar::after {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 28%;
+      background: rgba(255,255,255,.18);
+      content: "";
+    }
+    .chart-labels {
+      display: flex;
+      justify-content: space-between;
+      padding: 7px 5px 0;
+      color: #9aa8b0;
+      font-size: 10px;
+    }
+    .legend { display: flex; gap: 15px; color: var(--muted); font-size: 11px; }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .legend i { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; }
+    .legend i.orange { background: var(--orange); }
+    .status-list { display: grid; gap: 13px; }
+    .status-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .status-label { display: flex; align-items: center; gap: 9px; color: #53636d; font-size: 12px; }
+    .status-value { color: #32444e; font-weight: 600; }
+    .progress { width: 100%; height: 6px; margin-top: 6px; overflow: hidden; background: #edf2f4; border-radius: 5px; }
+    .progress > span { display: block; height: 100%; background: var(--primary); border-radius: inherit; }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      padding: 0 10px 10px;
+      color: #96a3ab;
+      border-bottom: 1px solid var(--line);
+      font-size: 11px;
+      font-weight: 500;
+      text-align: left;
+      white-space: nowrap;
+    }
+    td {
+      padding: 13px 10px;
+      color: #53636d;
+      border-bottom: 1px solid #f0f3f5;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr.clickable { cursor: pointer; transition: .15s ease; }
+    tbody tr.clickable:hover { background: #f8fcfd; }
+    .site-name { display: flex; align-items: center; gap: 8px; color: #33454f; font-weight: 600; }
+    .site-type { margin-top: 2px; color: #a0abb1; font-size: 10px; font-weight: 400; }
+    .site-favicon {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 21px;
+      padding: 0 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge.green { color: #168553; background: var(--green-soft); }
+    .badge.orange { color: #a66c20; background: var(--orange-soft); }
+    .badge.red { color: #bd4646; background: var(--red-soft); }
+    .badge.blue { color: #1479a3; background: var(--primary-soft); }
+    .badge.gray { color: #6e7f89; background: #f0f3f5; }
+    .activity-list { display: grid; gap: 0; }
+    .activity {
+      display: grid;
+      grid-template-columns: 9px 1fr auto;
+      gap: 9px;
+      align-items: start;
+      padding: 11px 0;
+      border-bottom: 1px solid #f0f3f5;
+    }
+    .activity:last-child { border-bottom: 0; }
+    .activity-dot { width: 7px; height: 7px; margin-top: 5px; background: var(--red); border-radius: 50%; }
+    .activity-dot.orange { background: var(--orange); }
+    .activity-title { color: #53636d; font-size: 12px; }
+    .activity-meta { margin-top: 2px; color: #a0abb1; font-size: 10px; }
+    .activity-time { color: #a0abb1; font-size: 10px; }
+
+    /* Variant B: site workbench */
+    .workbench {
+      display: grid;
+      grid-template-columns: 265px minmax(0, 1fr);
+      min-height: 655px;
+      overflow: hidden;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .site-rail { padding: 17px 0; background: #fbfcfd; border-right: 1px solid var(--line); }
+    .rail-head { display: flex; align-items: center; justify-content: space-between; padding: 0 17px 14px; }
+    .rail-title { color: #34444e; font-size: 13px; font-weight: 600; }
+    .rail-count { color: var(--muted); font-size: 11px; }
+    .rail-search { margin: 0 13px 13px; }
+    .input {
+      width: 100%;
+      height: 33px;
+      padding: 0 10px;
+      color: #4b5c66;
+      background: #fff;
+      border: 1px solid #dfe7eb;
+      border-radius: 5px;
+    }
+    .input::placeholder { color: #b1bcc2; }
+    .site-rail-item {
+      display: block;
+      width: calc(100% - 12px);
+      margin: 3px 6px;
+      padding: 11px 11px;
+      color: #687881;
+      background: transparent;
+      border: 0;
+      border-left: 3px solid transparent;
+      border-radius: 4px;
+      text-align: left;
+    }
+    .site-rail-item:hover { background: #f2f8fa; }
+    .site-rail-item.selected {
+      color: #276d8a;
+      background: #eaf7fb;
+      border-left-color: var(--primary);
+    }
+    .rail-site-line { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+    .rail-site-name { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .rail-site-meta { display: flex; align-items: center; gap: 6px; margin-top: 5px; color: #a0abb1; font-size: 10px; }
+    .mini-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; }
+    .mini-dot.orange { background: var(--orange); }
+    .detail-panel { min-width: 0; padding: 22px 25px 25px; }
+    .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+    .detail-title { display: flex; align-items: center; gap: 11px; }
+    .detail-title h2 { margin: 0; color: #2d3d46; font-size: 19px; font-weight: 600; }
+    .detail-title p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+    .detail-actions { display: flex; align-items: center; gap: 8px; }
+    .mode-segment { display: inline-flex; padding: 3px; background: #f0f4f6; border-radius: 6px; }
+    .mode-segment button {
+      min-width: 64px;
+      height: 29px;
+      padding: 0 9px;
+      color: #7b8a93;
+      background: transparent;
+      border: 0;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .mode-segment button.active { color: #fff; background: var(--primary); box-shadow: 0 3px 7px rgba(32,167,223,.2); }
+    .tabs { display: flex; gap: 23px; margin: 0 -2px 20px; border-bottom: 1px solid var(--line); }
+    .tab {
+      position: relative;
+      padding: 14px 2px 11px;
+      color: #91a0a8;
+      background: transparent;
+      border: 0;
+      font-size: 12px;
+    }
+    .tab.active { color: var(--primary-dark); font-weight: 600; }
+    .tab.active::after {
+      position: absolute;
+      right: 0;
+      bottom: -1px;
+      left: 0;
+      height: 2px;
+      background: var(--primary);
+      content: "";
+    }
+    .detail-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(245px, .65fr); gap: 16px; }
+    .sub-card { padding: 16px; background: #fbfcfd; border: 1px solid var(--line); border-radius: 7px; }
+    .sub-card + .sub-card { margin-top: 13px; }
+    .sub-title { margin-bottom: 13px; color: #4c5e68; font-size: 12px; font-weight: 600; }
+    .config-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 39px; border-bottom: 1px solid #edf1f3; }
+    .config-row:last-child { border-bottom: 0; }
+    .config-key { color: #83919a; font-size: 12px; }
+    .config-value { color: #40525d; font-size: 12px; font-weight: 500; text-align: right; }
+    .route-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .route-chip { padding: 4px 8px; color: #4d7384; background: #eaf7fb; border-radius: 4px; font: 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .route-chip.sse { color: #6a61a9; background: #f0effc; }
+    .capability-list { display: grid; gap: 9px; }
+    .capability { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #667680; font-size: 11px; }
+    .capability .check { color: var(--green); font-size: 14px; }
+    .capability .warn { color: var(--orange); font-size: 14px; }
+    .apply-card { background: linear-gradient(145deg, #f5fbfd, #fff); }
+    .apply-status { display: flex; align-items: center; gap: 8px; margin: 1px 0 15px; color: #4c6470; font-size: 12px; }
+    .pipeline { display: grid; gap: 0; }
+    .pipeline-step { position: relative; display: flex; align-items: center; gap: 9px; min-height: 33px; color: #8a989f; font-size: 11px; }
+    .pipeline-step:not(:last-child)::before { position: absolute; top: 23px; left: 7px; width: 1px; height: 23px; background: #dfe8eb; content: ""; }
+    .pipeline-step.done { color: #4d6570; }
+    .pipeline-step.current { color: var(--primary-dark); font-weight: 600; }
+    .step-icon { z-index: 1; display: grid; place-items: center; width: 15px; height: 15px; color: #a8b5bb; background: #fff; border: 1px solid #d7e1e5; border-radius: 50%; font-size: 9px; }
+    .pipeline-step.done .step-icon { color: #fff; background: var(--green); border-color: var(--green); }
+    .pipeline-step.current .step-icon { color: #fff; background: var(--primary); border-color: var(--primary); }
+    .rule-table td { padding-top: 10px; padding-bottom: 10px; }
+    .rule-id { color: #94a1a8; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .rule-name { color: #465963; font-size: 12px; font-weight: 500; }
+    .rule-desc { margin-top: 2px; color: #a3afb5; font-size: 10px; }
+    .switch {
+      position: relative;
+      width: 29px;
+      height: 17px;
+      padding: 0;
+      background: #cbd6db;
+      border: 0;
+      border-radius: 10px;
+    }
+    .switch::after { position: absolute; top: 3px; left: 3px; width: 11px; height: 11px; background: #fff; border-radius: 50%; content: ""; transition: .18s ease; }
+    .switch.on { background: var(--green); }
+    .switch.on::after { left: 15px; }
+    .code-preview {
+      max-height: 390px;
+      overflow: auto;
+      margin: 0;
+      padding: 16px;
+      color: #ccecf6;
+      background: #1f2d35;
+      border-radius: 6px;
+      font: 11px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    .code-comment { color: #7f9ba7; }
+    .code-key { color: #7bd8f3; }
+    .code-value { color: #c3e6a0; }
+
+    /* Variant C: security operations cockpit */
+    .ops-alert {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+      padding: 13px 16px;
+      background: linear-gradient(90deg, #fff9ec, #fffdf8);
+      border: 1px solid #f3dfb6;
+      border-left: 3px solid var(--orange);
+      border-radius: 7px;
+    }
+    .ops-alert-copy { display: flex; align-items: center; gap: 10px; }
+    .ops-alert-icon { color: var(--orange); font-size: 18px; }
+    .ops-alert strong { display: block; color: #6e5b3d; font-size: 12px; font-weight: 600; }
+    .ops-alert span { display: block; margin-top: 2px; color: #a18c6c; font-size: 11px; }
+    .ops-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr); gap: 15px; margin-bottom: 15px; }
+    .ops-grid.three { grid-template-columns: 1.1fr .9fr .9fr; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      align-items: center;
+      gap: 0;
+      margin: 20px 2px 18px;
+    }
+    .flow-node { position: relative; text-align: center; }
+    .flow-node:not(:last-child)::after {
+      position: absolute;
+      top: 19px;
+      left: 67%;
+      width: 66%;
+      height: 1px;
+      background: #cbdde3;
+      content: "";
+    }
+    .flow-circle {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      margin: 0 auto 8px;
+      color: #5d7a86;
+      background: #f0f6f8;
+      border: 1px solid #d7e7ec;
+      border-radius: 50%;
+      font-size: 15px;
+    }
+    .flow-node.active .flow-circle { color: #fff; background: var(--primary); border-color: var(--primary); box-shadow: 0 5px 13px rgba(32,167,223,.22); }
+    .flow-node.good .flow-circle { color: #fff; background: var(--green); border-color: var(--green); }
+    .flow-name { color: #677983; font-size: 10px; }
+    .flow-state { margin-top: 2px; color: #a3afb5; font-size: 9px; }
+    .compatibility { display: grid; gap: 9px; }
+    .compat-row { display: grid; grid-template-columns: 104px 1fr auto; align-items: center; gap: 9px; min-height: 35px; padding: 0 9px; background: #fbfcfd; border: 1px solid #edf1f3; border-radius: 5px; }
+    .compat-name { color: #657680; font-size: 11px; }
+    .compat-bar { height: 5px; overflow: hidden; background: #e9eff1; border-radius: 4px; }
+    .compat-bar span { display: block; height: 100%; background: var(--green); border-radius: inherit; }
+    .compat-value { color: #4d606a; font-size: 10px; font-weight: 600; }
+    .health-list { display: grid; gap: 12px; }
+    .health-item { display: grid; grid-template-columns: 29px 1fr auto; align-items: center; gap: 9px; }
+    .health-icon { display: grid; place-items: center; width: 27px; height: 27px; color: var(--primary); background: var(--primary-soft); border-radius: 6px; font-size: 13px; }
+    .health-title { color: #5a6b75; font-size: 11px; }
+    .health-meta { margin-top: 2px; color: #a4afb5; font-size: 10px; }
+    .health-value { color: var(--green); font-size: 11px; font-weight: 600; }
+    .event-list { display: grid; gap: 0; }
+    .event-item { display: grid; grid-template-columns: 72px 1fr auto; gap: 10px; align-items: center; min-height: 43px; border-bottom: 1px solid #eef2f4; }
+    .event-item:last-child { border-bottom: 0; }
+    .event-time { color: #a4afb5; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .event-text { color: #60717b; font-size: 11px; }
+    .event-text strong { color: #3d525d; font-weight: 600; }
+    .ops-number { color: #2d404a; font-size: 22px; font-weight: 600; }
+    .ops-number small { margin-left: 3px; color: #9aa7ad; font-size: 10px; font-weight: 400; }
+    .ops-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .ops-summary .mini-stat { padding: 11px 12px; background: #fbfcfd; border: 1px solid #edf1f3; border-radius: 5px; }
+    .mini-label { color: #9ba8ae; font-size: 10px; }
+    .mini-value { margin-top: 3px; color: #455963; font-size: 16px; font-weight: 600; }
+
+    .ip-list { display: flex; flex-wrap: wrap; gap: 7px; margin: 3px 0 13px; }
+    .ip-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; color: #657680; background: #f2f6f7; border-radius: 4px; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .ip-chip button { padding: 0; color: #aab5ba; background: transparent; border: 0; font-size: 13px; line-height: 1; }
+    .add-ip { display: flex; gap: 7px; }
+    .add-ip .input { height: 30px; }
+    .empty-state { padding: 28px 10px; color: #a1adb3; text-align: center; font-size: 12px; }
+
+    .variant-switcher {
+      position: fixed;
+      z-index: 20;
+      right: 50%;
+      bottom: 17px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 43px;
+      padding: 5px 8px;
+      color: #eef9fc;
+      background: #223742;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(25, 43, 52, .26);
+      transform: translateX(50%);
+    }
+    .variant-switcher button {
+      display: grid;
+      place-items: center;
+      width: 29px;
+      height: 29px;
+      color: #cfe8ef;
+      background: rgba(255,255,255,.08);
+      border: 0;
+      border-radius: 50%;
+      font-size: 15px;
+    }
+    .variant-switcher button:hover { color: #fff; background: rgba(32,167,223,.75); }
+    .variant-label { min-width: 184px; color: #c5dbe2; font-size: 11px; text-align: center; }
+    .variant-label strong { color: #fff; font-weight: 600; }
+    .prototype-watermark {
+      position: fixed;
+      z-index: 19;
+      right: 19px;
+      bottom: 21px;
+      padding: 5px 9px;
+      color: #aab9bf;
+      background: rgba(255,255,255,.85);
+      border: 1px solid #dfe7ea;
+      border-radius: 4px;
+      font-size: 10px;
+      pointer-events: none;
+    }
+    .toast {
+      position: fixed;
+      z-index: 30;
+      top: 79px;
+      right: 28px;
+      max-width: 360px;
+      padding: 11px 14px;
+      color: #fff;
+      background: #263d48;
+      border-left: 3px solid var(--primary);
+      border-radius: 5px;
+      box-shadow: 0 8px 22px rgba(29,53,64,.2);
+      font-size: 12px;
+      animation: slide-in .2s ease-out;
+    }
+    @keyframes slide-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+    @media (max-width: 1050px) {
+      .sidebar { width: 190px; flex-basis: 190px; }
+      .sidebar-foot { width: 190px; }
+      .page-content { padding-right: 20px; padding-left: 20px; }
+      .classic-grid, .classic-bottom, .ops-grid, .ops-grid.three { grid-template-columns: 1fr; }
+      .workbench { grid-template-columns: 220px minmax(0, 1fr); }
+    }
+    @media (max-width: 760px) {
+      .sidebar { display: none; }
+      .topbar { padding: 0 15px; }
+      .server-pill { display: none; }
+      .page-content { padding: 20px 13px 92px; }
+      .page-heading { display: block; }
+      .heading-actions { margin-top: 14px; }
+      .metric-grid { grid-template-columns: repeat(2, 1fr); }
+      .workbench { display: block; }
+      .site-rail { border-right: 0; border-bottom: 1px solid var(--line); }
+      .site-rail-item { display: inline-block; width: auto; min-width: 160px; }
+      .detail-panel { padding: 17px 14px; }
+      .detail-head { display: block; }
+      .detail-actions { flex-wrap: wrap; margin-top: 14px; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; gap: 12px; }
+      .flow-node { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 10px; text-align: left; }
+      .flow-circle { grid-row: span 2; margin: 0; }
+      .flow-node:not(:last-child)::after { top: 39px; left: 18px; width: 1px; height: 20px; }
+      .flow-name, .flow-state { align-self: end; }
+      .variant-switcher { right: 13px; left: 13px; justify-content: space-between; transform: none; }
+      .variant-label { min-width: 0; flex: 1; }
+      .prototype-watermark { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    (function () {
+      "use strict";
+
+      var variantMeta = {
+        A: "经典总览",
+        B: "站点工作台",
+        C: "安全运维"
+      };
+
+      var sites = [
+        { id: 123, name: "example.com", type: "Reverse Proxy", upstream: "127.0.0.1:3000", requests: "128,420", attacks: "86", ws: ["/ws/"], sse: ["/events/"], engine: "Lua Enhanced" },
+        { id: 124, name: "api.demo.cn", type: "Python API", upstream: "127.0.0.1:8000", requests: "84,219", attacks: "31", ws: [], sse: ["/stream/"], engine: "Native" },
+        { id: 125, name: "blog.demo.cn", type: "PHP / WordPress", upstream: "PHP-FPM 82", requests: "61,108", attacks: "119", ws: [], sse: [], engine: "Lua Enhanced" },
+        { id: 126, name: "java.demo.cn", type: "Docker / Java", upstream: "127.0.0.1:8080", requests: "43,806", attacks: "12", ws: ["/socket/"], sse: [], engine: "Native" }
+      ];
+
+      var rules = [
+        { id: "NG1001", name: "敏感文件暴露", desc: ".env、.git、配置备份文件", category: "Sensitive File", severity: "高", action: "阻断" },
+        { id: "NG1002", name: "路径穿越", desc: "../、编码后的相对路径", category: "Traversal", severity: "高", action: "阻断" },
+        { id: "NG1003", name: "云元数据 SSRF", desc: "169.254.169.254 及 metadata 路径", category: "SSRF", severity: "高", action: "阻断" },
+        { id: "NG2001", name: "扫描器行为", desc: "短时间大量动态 URI 探测", category: "Scanner", severity: "中", action: "监控" },
+        { id: "NG3001", name: "SQL Injection", desc: "查询参数中的常见 SQL 注入特征", category: "SQLi", severity: "中", action: "监控" },
+        { id: "NG3002", name: "XSS Payload", desc: "查询参数中的脚本注入特征", category: "XSS", severity: "中", action: "监控" }
+      ];
+
+      var state = {
+        variant: "A",
+        nav: "概览",
+        selectedSite: "example.com",
+        tab: "概览",
+        globalEnabled: true,
+        applying: false,
+        applyStage: -1,
+        lastApply: "今天 14:32:18",
+        toast: "",
+        siteModes: {
+          "example.com": "MONITOR",
+          "api.demo.cn": "BLOCK",
+          "blog.demo.cn": "BLOCK",
+          "java.demo.cn": "MONITOR"
+        },
+        ruleEnabled: {
+          NG1001: true,
+          NG1002: true,
+          NG1003: true,
+          NG2001: true,
+          NG3001: true,
+          NG3002: false
+        },
+        denyIps: ["203.0.113.42", "198.51.100.0/24"],
+        allowIps: ["192.0.2.10"],
+        applyTimer: null
+      };
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function selectedSite() {
+        for (var i = 0; i < sites.length; i++) {
+          if (sites[i].name === state.selectedSite) return sites[i];
+        }
+        return sites[0];
+      }
+
+      function modeBadge(mode) {
+        if (mode === "BLOCK") return '<span class="badge red">BLOCK</span>';
+        if (mode === "MONITOR") return '<span class="badge orange">MONITOR</span>';
+        return '<span class="badge gray">OFF</span>';
+      }
+
+      function engineBadge(site) {
+        if (site.engine === "Lua Enhanced") return '<span class="badge blue">Lua Enhanced</span>';
+        return '<span class="badge gray">Native</span>';
+      }
+
+      function typeIcon(site) {
+        if (site.type.indexOf("PHP") >= 0) return "▣";
+        if (site.type.indexOf("Docker") >= 0) return "◈";
+        if (site.type.indexOf("Python") >= 0) return "◆";
+        return "⌁";
+      }
+
+      function sidebar() {
+        var items = [
+          ["概览", "⌂"],
+          ["站点防护", "◉"],
+          ["规则管理", "◇"],
+          ["IP 黑白名单", "⊘"],
+          ["CC / 限流", "↯"],
+          ["Cloudflare", "☁"],
+          ["攻击日志", "≡"],
+          ["备份恢复", "↻"]
+        ];
+        var html = '<aside class="sidebar">';
+        html += '<div class="brand"><div class="brand-mark">盾</div><div><div class="brand-title">Nginx Guard</div><div class="brand-subtitle">aaPanel 插件原型</div></div></div>';
+        html += '<div class="nav-caption">防护中心</div>';
+        for (var i = 0; i < items.length; i++) {
+          var active = state.nav === items[i][0] ? " active" : "";
+          var badge = items[i][0] === "攻击日志" ? '<span class="nav-badge">6</span>' : "";
+          html += '<button class="nav-item' + active + '" data-action="nav" data-nav="' + items[i][0] + '"><span class="nav-icon">' + items[i][1] + '</span><span>' + items[i][0] + '</span>' + badge + '</button>';
+        }
+        html += '<div class="nav-caption">系统</div>';
+        html += '<button class="nav-item" data-action="diagnose"><span class="nav-icon">⚙</span><span>系统诊断</span></button>';
+        html += '<div class="sidebar-foot"><strong>Engine ' + (state.globalEnabled ? "Enabled" : "Disabled") + '</strong>v1.0.0 · Prototype</div>';
+        html += '</aside>';
+        return html;
+      }
+
+      function topbar() {
+        return '<header class="topbar"><div class="crumb">插件 / <strong>Nginx Guard</strong></div><div class="top-actions"><div class="server-pill"><span class="server-dot"></span> Nginx · aaPanel</div><div class="engine-state"><span>全局引擎</span><button class="toggle ' + (state.globalEnabled ? "on" : "") + '" data-action="toggle-engine" aria-label="切换全局引擎"></button><span>' + (state.globalEnabled ? "运行中" : "已关闭") + '</span></div></div></header>';
+      }
+
+      function heading(title, desc, actions) {
+        return '<div class="page-heading"><div><h1>' + title + '</h1><p>' + desc + '</p></div><div class="heading-actions">' + (actions || "") + '</div></div>';
+      }
+
+      function prototypeNote() {
+        return '<div class="prototype-note"><span class="note-icon">ⓘ</span><span>这是 HTML 交互原型：配置只保存在当前页面内，实际版本将由 aaPanel Python 后端生成 Nginx 配置并执行 <strong>nginx -t → reload</strong>。</span></div>';
+      }
+
+      function metric(label, value, foot, icon, trend) {
+        return '<section class="card metric-card"><div class="metric-icon">' + icon + '</div><div class="metric-label">' + label + '</div><div class="metric-value">' + value + '</div><div class="metric-foot ' + (trend || "") + '">' + foot + '</div></section>';
+      }
+
+      function siteRows() {
+        var html = "";
+        for (var i = 0; i < sites.length; i++) {
+          var site = sites[i];
+          var mode = state.siteModes[site.name];
+          var selected = state.selectedSite === site.name;
+          html += '<tr class="clickable" data-action="select-site" data-site="' + site.name + '">';
+          html += '<td><div class="site-name"><span class="site-favicon">' + typeIcon(site) + '</span><span><span>' + site.name + '</span><span class="site-type">' + site.type + '</span></span></div></td>';
+          html += '<td>' + modeBadge(mode) + '</td><td>' + engineBadge(site) + '</td>';
+          html += '<td>' + (site.ws.length ? '<span class="badge green">WS ' + site.ws.length + '</span>' : '<span class="muted">—</span>') + ' ' + (site.sse.length ? '<span class="badge blue">SSE ' + site.sse.length + '</span>' : "") + '</td>';
+          html += '<td>' + site.requests + '</td><td class="' + (site.attacks !== "0" ? "down" : "") + '">' + site.attacks + '</td>';
+          html += '<td><span class="badge green">正常</span>' + (selected ? ' <span class="badge blue">当前</span>' : "") + '</td></tr>';
+        }
+        return html;
+      }
+
+      function activityRows() {
+        var entries = [
+          ["NG1001", "example.com", "/.env", "刚刚", ""],
+          ["NG1002", "api.demo.cn", "/?file=..%2fetc/passwd", "2 分钟前", "orange"],
+          ["NG2001", "blog.demo.cn", "/wp-login.php", "5 分钟前", ""],
+          ["NG1003", "example.com", "/webhook?url=169.254.169.254", "8 分钟前", "orange"]
+        ];
+        var html = "";
+        for (var i = 0; i < entries.length; i++) {
+          html += '<div class="activity"><span class="activity-dot ' + entries[i][4] + '"></span><div><div class="activity-title"><strong>' + entries[i][0] + '</strong> · ' + entries[i][1] + '</div><div class="activity-meta">' + entries[i][2] + '</div></div><span class="activity-time">' + entries[i][3] + '</span></div>';
+        }
+        return html;
+      }
+
+      function variantA() {
+        var bars = [42, 55, 45, 76, 62, 84, 70, 93, 65, 82, 96, 74, 88, 67, 91, 79, 98, 84];
+        var chart = "";
+        for (var i = 0; i < bars.length; i++) chart += '<span class="chart-bar" style="height:' + bars[i] + '%"></span>';
+        var actions = '<button class="btn" data-action="show-config">查看配置</button><button class="btn primary" data-action="apply">应用配置</button>';
+        var status = '<div class="status-list"><div class="status-row"><span class="status-label"><span class="dot"></span>引擎状态</span><span class="status-value">' + (state.globalEnabled ? "运行中" : "已关闭") + '</span></div><div><div class="status-row"><span class="status-label">受保护站点</span><span class="status-value">3 / 4</span></div><div class="progress"><span style="width:75%"></span></div></div><div><div class="status-row"><span class="status-label">今日规则命中</span><span class="status-value">248</span></div><div class="progress"><span style="width:52%;background:var(--orange)"></span></div></div><div class="status-row"><span class="status-label">临时封禁 IP</span><span class="status-value">18</span></div><div class="status-row"><span class="status-label">上次应用</span><span class="status-value">' + state.lastApply + '</span></div></div>';
+        return heading("防护总览", "查看所有站点的防护状态、攻击趋势和配置健康度。", actions)
+          + prototypeNote()
+          + '<div class="metric-grid">'
+          + metric("今日请求", "317,553", '<span class="up">↑ 12.8%</span> 较昨日', "↗", "up")
+          + metric("今日攻击", "248", '<span class="down">↑ 8.4%</span> 较昨日', "⚠", "down")
+          + metric("临时封禁", "18", '<span class="up">运行时 TTL</span> 无 reload', "⊘", "up")
+          + metric("受保护站点", "3 / 4", '<span class="up">75%</span> wiring 正常', "◉", "up")
+          + '</div>'
+          + '<div class="classic-grid"><section class="card"><div class="card-head"><div><div class="card-title">最近 24 小时请求与攻击</div><div class="card-subtitle">请求量保持平稳，攻击峰值已被限流</div></div><div class="legend"><span><i></i>请求</span><span><i class="orange"></i>攻击</span></div></div><div class="chart-wrap"><div class="chart">' + chart + '</div><div class="chart-labels"><span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>现在</span></div></div></section><section class="card"><div class="card-head"><div><div class="card-title">引擎健康度</div><div class="card-subtitle">只展示当前配置状态</div></div><span class="badge green">Healthy</span></div>' + status + '</section></div>'
+          + '<div class="classic-bottom"><section class="card"><div class="card-head"><div><div class="card-title">站点防护状态</div><div class="card-subtitle">点击站点进入详细配置</div></div><button class="btn small" data-action="nav" data-nav="站点防护">管理站点</button></div><div class="table-scroll"><table><thead><tr><th>站点</th><th>模式</th><th>引擎</th><th>流式接口</th><th>今日请求</th><th>攻击</th><th>配置</th></tr></thead><tbody>' + siteRows() + '</tbody></table></div></section><section class="card"><div class="card-head"><div><div class="card-title">最近攻击</div><div class="card-subtitle">监控和阻断事件</div></div><button class="btn small" data-action="nav" data-nav="攻击日志">查看全部</button></div><div class="activity-list">' + activityRows() + '</div></section></div>';
+      }
+
+      function siteRail() {
+        var html = '<aside class="site-rail"><div class="rail-head"><span class="rail-title">我的站点</span><span class="rail-count">' + sites.length + " 个" + '</span></div><div class="rail-search"><input class="input" placeholder="搜索域名或类型"></div>';
+        for (var i = 0; i < sites.length; i++) {
+          var site = sites[i];
+          var selected = state.selectedSite === site.name;
+          var mode = state.siteModes[site.name];
+          html += '<button class="site-rail-item ' + (selected ? "selected" : "") + '" data-action="select-site" data-site="' + site.name + '"><div class="rail-site-line"><span class="rail-site-name">' + site.name + '</span>' + modeBadge(mode) + '</div><div class="rail-site-meta"><span class="mini-dot ' + (mode === "MONITOR" ? "orange" : "") + '"></span><span>' + site.type + '</span><span>·</span><span>' + site.requests + ' req</span></div></button>';
+        }
+        html += '</aside>';
+        return html;
+      }
+
+      function modeSelector(site) {
+        var current = state.siteModes[site.name];
+        var modes = ["OFF", "MONITOR", "BLOCK"];
+        var html = '<div class="mode-segment">';
+        for (var i = 0; i < modes.length; i++) {
+          html += '<button class="' + (current === modes[i] ? "active" : "") + '" data-action="set-mode" data-mode="' + modes[i] + '">' + modes[i] + '</button>';
+        }
+        return html + '</div>';
+      }
+
+      function routeChips(site) {
+        var html = "";
+        for (var i = 0; i < site.ws.length; i++) html += '<span class="route-chip">WS ' + site.ws[i] + '</span>';
+        for (var j = 0; j < site.sse.length; j++) html += '<span class="route-chip sse">SSE ' + site.sse[j] + '</span>';
+        return html || '<span class="muted">未配置流式接口</span>';
+      }
+
+      function configPreview(site) {
+        var mode = state.siteModes[site.name].toLowerCase();
+        var luaLine = site.engine === "Lua Enhanced" ? 'access_by_lua_file /www/server/panel/plugin/nginx_guard/engine/access.lua;' : '# Lua 不可用：使用 Native 规则降级';
+        return '<span class="code-comment"># Nginx Guard generated preview · site-' + site.id + '</span>\n<span class="code-key"># BEGIN NGINX_GUARD_SITE:' + site.id + '</span>\n<span class="code-key">include</span> /www/server/nginx_guard/sites/site-' + site.id + '.conf;\n<span class="code-key"># END NGINX_GUARD_SITE:' + site.id + '</span>\n\n<span class="code-comment"># site-' + site.id + '.conf</span>\n<span class="code-key">set</span> $ng_guard_site_mode <span class="code-value">"' + mode + '"</span>;\n' + luaLine + '\n<span class="code-key">limit_req</span> zone=ng_guard_rate_10 burst=20 nodelay;\n\n<span class="code-comment"># WebSocket/SSE：保留原站点 proxy_pass、Upgrade、Connection、</span>\n<span class="code-comment"># proxy_buffering 和 proxy_read_timeout，不由 WAF 覆盖。</span>';
+      }
+
+      function overviewTab(site) {
+        return '<div class="detail-grid"><div><section class="sub-card"><div class="sub-title">站点基本信息</div><div class="config-row"><span class="config-key">站点类型</span><span class="config-value">' + site.type + '</span></div><div class="config-row"><span class="config-key">当前上游</span><span class="config-value"><code>' + site.upstream + '</code></span></div><div class="config-row"><span class="config-key">今日请求 / 攻击</span><span class="config-value">' + site.requests + ' / <span class="down">' + site.attacks + '</span></span></div><div class="config-row"><span class="config-key">WAF 模式</span><span class="config-value">' + modeBadge(state.siteModes[site.name]) + '</span></div></section><section class="sub-card"><div class="sub-title">WebSocket / SSE 兼容路径</div><div class="route-list">' + routeChips(site) + '</div><div class="card-subtitle" style="margin-top:12px">兼容模式只检查进入请求，不读取 Body，不过滤持续响应。</div></section><section class="sub-card"><div class="sub-title">基础限流</div><div class="config-row"><span class="config-key">站点速率</span><span class="config-value">10 req/s</span></div><div class="config-row"><span class="config-key">突发 burst</span><span class="config-value">20</span></div><div class="config-row"><span class="config-key">静态资源</span><span class="config-value"><span class="badge green">低优先级</span></span></div></section></div><div><section class="sub-card apply-card"><div class="sub-title">配置应用</div><div class="apply-status"><span class="dot"></span><span>' + (state.applying ? "正在执行配置事务" : "当前配置已验证") + '</span></div>' + applyPipeline() + '<button class="btn primary" style="width:100%;margin-top:14px" data-action="apply">' + (state.applying ? "应用中…" : "保存并应用配置") + '</button></section><section class="sub-card"><div class="sub-title">兼容性检查</div><div class="capability-list"><div class="capability"><span>原有 proxy_pass</span><span class="check">✓ 保留</span></div><div class="capability"><span>WebSocket Upgrade</span><span class="check">✓ 保留</span></div><div class="capability"><span>SSE 响应过滤</span><span class="check">✓ 未启用</span></div><div class="capability"><span>POST Body 检测</span><span class="warn">! 未启用</span></div></div></section></div></div>';
+      }
+
+      function ruleTab() {
+        var html = '<div class="card" style="box-shadow:none;padding:0;border:0"><div class="card-head"><div><div class="card-title">规则策略</div><div class="card-subtitle">高危规则默认阻断，SQLi/XSS v1 默认监控</div></div><button class="btn small" data-action="apply">保存并应用</button></div><div class="table-scroll"><table class="rule-table"><thead><tr><th>规则</th><th>分类</th><th>等级</th><th>默认动作</th><th>启用</th></tr></thead><tbody>';
+        for (var i = 0; i < rules.length; i++) {
+          var rule = rules[i];
+          html += '<tr><td><div class="rule-id">' + rule.id + '</div><div class="rule-name">' + rule.name + '</div><div class="rule-desc">' + rule.desc + '</div></td><td><span class="badge gray">' + rule.category + '</span></td><td>' + (rule.severity === "高" ? '<span class="badge red">高</span>' : '<span class="badge orange">中</span>') + '</td><td>' + (rule.action === "阻断" ? '<span class="badge red">BLOCK · 403</span>' : '<span class="badge orange">MONITOR</span>') + '</td><td><button class="switch ' + (state.ruleEnabled[rule.id] ? "on" : "") + '" data-action="toggle-rule" data-rule="' + rule.id + '"></button></td></tr>';
+        }
+        return html + '</tbody></table></div></div>';
+      }
+
+      function rateTab() {
+        return '<div class="detail-grid"><div><section class="sub-card"><div class="sub-title">请求速率</div><div class="config-row"><span class="config-key">按 IP 速率</span><span class="config-value"><select class="input" style="width:125px;height:29px"><option>5 req/s</option><option selected>10 req/s</option><option>20 req/s</option><option>50 req/s</option></select></span></div><div class="config-row"><span class="config-key">burst</span><span class="config-value"><input class="input" style="width:125px;height:29px" value="20"></span></div><div class="config-row"><span class="config-key">超限响应</span><span class="config-value"><span class="badge blue">429 Too Many Requests</span></span></div><div class="config-row"><span class="config-key">监控模式</span><span class="config-value"><span class="badge orange">dry_run</span></span></div></section><section class="sub-card"><div class="sub-title">URL 独立限流 <span class="badge blue">Lua Enhanced</span></div><div class="route-list"><span class="route-chip">/api/</span><span class="route-chip">/search</span><span class="route-chip">/wp-login.php</span></div><div class="card-subtitle" style="margin-top:12px">Native 模式不生成覆盖性 location；没有 Lua 时此项只展示为不可用。</div></section></div><div><section class="sub-card"><div class="sub-title">临时自动封禁</div><div class="config-row"><span class="config-key">触发条件</span><span class="config-value">10 秒内 20 次攻击</span></div><div class="config-row"><span class="config-key">封禁时长</span><span class="config-value">1 小时 TTL</span></div><div class="config-row"><span class="config-key">持久化方式</span><span class="config-value"><span class="badge blue">Lua shared dict</span></span></div><div class="config-row"><span class="config-key">主机防火墙</span><span class="config-value"><span class="badge green">不使用</span></span></div></section></div></div>';
+      }
+
+      function logTab() {
+        return '<div class="card" style="box-shadow:none;padding:0;border:0"><div class="card-head"><div><div class="card-title">攻击日志</div><div class="card-subtitle">敏感字段已脱敏，POST Body 和 Authorization 不记录</div></div><button class="btn small">导出当前页</button></div><div class="table-scroll"><table><thead><tr><th>时间</th><th>客户端 IP</th><th>规则</th><th>请求 URI</th><th>动作</th><th>状态</th></tr></thead><tbody><tr><td>14:35:21</td><td><code>203.0.113.42</code></td><td><span class="rule-id">NG1001</span> 敏感文件</td><td><code>/.env</code></td><td><span class="badge red">BLOCK</span></td><td>403</td></tr><tr><td>14:33:08</td><td><code>198.51.100.22</code></td><td><span class="rule-id">NG2001</span> 扫描器</td><td><code>/wp-login.php</code></td><td><span class="badge orange">MONITOR</span></td><td>200</td></tr><tr><td>14:30:46</td><td><code>192.0.2.77</code></td><td><span class="rule-id">NG1002</span> 路径穿越</td><td><code>/?file=..%2fetc/passwd</code></td><td><span class="badge red">BLOCK</span></td><td>403</td></tr></tbody></table></div></div>';
+      }
+
+      function nginxTab(site) {
+        return '<div class="sub-card" style="padding:0;background:transparent;border:0"><div class="card-head"><div><div class="card-title">Nginx 配置预览</div><div class="card-subtitle">只读预览；应用时由 Python 事务层生成并测试</div></div><button class="btn small" data-action="apply">nginx -t</button></div><pre class="code-preview">' + configPreview(site) + '</pre><div class="prototype-note" style="margin-top:13px;margin-bottom:0"><span class="note-icon">ⓘ</span><span>预览显示的 include 属于插件自己的配置。原站点 location、proxy_pass、WebSocket 和 SSE 配置保持不变。</span></div></div>';
+      }
+
+      function applyPipeline() {
+        var labels = ["保存配置", "生成 include", "备份", "nginx -t", "reload"];
+        var html = '<div class="pipeline">';
+        for (var i = 0; i < labels.length; i++) {
+          var done = state.applyStage >= i && state.applyStage >= 0;
+          var current = state.applying && state.applyStage === i;
+          html += '<div class="pipeline-step ' + (done ? "done " : "") + (current ? "current" : "") + '"><span class="step-icon">' + (done ? "✓" : (i + 1)) + '</span><span>' + labels[i] + (current ? "…" : "") + '</span></div>';
+        }
+        return html + '</div>';
+      }
+
+      function variantB() {
+        var site = selectedSite();
+        var content = '<div class="detail-panel"><div class="detail-head"><div class="detail-title"><span class="site-favicon">' + typeIcon(site) + '</span><div><h2>' + site.name + '</h2><p>' + site.type + ' · ' + site.upstream + ' · wiring 正常</p></div></div><div class="detail-actions">' + modeSelector(site) + '<button class="btn primary" data-action="apply">应用配置</button></div></div><div class="tabs"><button class="tab ' + (state.tab === "概览" ? "active" : "") + '" data-action="tab" data-tab="概览">概览</button><button class="tab ' + (state.tab === "规则" ? "active" : "") + '" data-action="tab" data-tab="规则">规则</button><button class="tab ' + (state.tab === "限流" ? "active" : "") + '" data-action="tab" data-tab="限流">CC / 限流</button><button class="tab ' + (state.tab === "日志" ? "active" : "") + '" data-action="tab" data-tab="日志">攻击日志</button><button class="tab ' + (state.tab === "Nginx预览" ? "active" : "") + '" data-action="tab" data-tab="Nginx预览">Nginx 预览</button></div>';
+        if (state.tab === "规则") content += ruleTab();
+        else if (state.tab === "限流") content += rateTab();
+        else if (state.tab === "日志") content += logTab();
+        else if (state.tab === "Nginx预览") content += nginxTab(site);
+        else content += overviewTab(site);
+        content += '</div>';
+        return heading("站点防护", "按站点编辑 WAF 模式、兼容路径和限流策略。", '<button class="btn" data-action="reconcile">检查 wiring</button>') + prototypeNote() + '<div class="workbench">' + siteRail() + content + '</div>';
+      }
+
+      function variantC() {
+        var health = [
+          ["◈", "Native 规则编译", "4 个站点配置", "正常"],
+          ["⌁", "Lua shared dict", "16 MB / 16 MB", "正常"],
+          ["≡", "攻击日志", "今日 248 条", "正常"],
+          ["☁", "Cloudflare Real IP", "网段更新于 2 小时前", "正常"]
+        ];
+        var events = [
+          ["14:35:21", "example.com", "NG1001", "/.env", "403"],
+          ["14:33:08", "api.demo.cn", "NG2001", "/wp-login.php", "监控"],
+          ["14:30:46", "example.com", "NG1002", "file=..%2fetc/passwd", "403"],
+          ["14:28:12", "java.demo.cn", "CC", "/api/search", "429"]
+        ];
+        var healthHtml = "";
+        for (var i = 0; i < health.length; i++) healthHtml += '<div class="health-item"><span class="health-icon">' + health[i][0] + '</span><div><div class="health-title">' + health[i][1] + '</div><div class="health-meta">' + health[i][2] + '</div></div><span class="health-value">' + health[i][3] + '</span></div>';
+        var eventHtml = "";
+        for (var j = 0; j < events.length; j++) eventHtml += '<div class="event-item"><span class="event-time">' + events[j][0] + '</span><span class="event-text"><strong>' + events[j][1] + '</strong> · ' + events[j][2] + ' · <code>' + events[j][3] + '</code></span><span class="badge ' + (events[j][4] === "监控" ? "orange" : events[j][4] === "429" ? "blue" : "red") + '">' + events[j][4] + '</span></div>';
+        return heading("安全运维", "用一次视图确认引擎、站点兼容性和最近配置事务。", '<button class="btn" data-action="reconcile">重新检查</button><button class="btn primary" data-action="apply">应用配置</button>')
+          + prototypeNote()
+          + '<div class="ops-alert"><div class="ops-alert-copy"><span class="ops-alert-icon">⚠</span><div><strong>有 1 个站点处于 MONITOR 模式</strong><span>example.com 最近 24 小时命中 86 次规则，建议确认误报后再切换 BLOCK。</span></div></div><button class="btn small" data-action="select-site" data-site="example.com">查看站点</button></div>'
+          + '<div class="ops-grid"><section class="card"><div class="card-head"><div><div class="card-title">请求处理链路</div><div class="card-subtitle">通过后继续执行原有 proxy_pass / fastcgi_pass</div></div><span class="badge green">无全局阻断</span></div><div class="flow"><div class="flow-node good"><div class="flow-circle">☁</div><div class="flow-name">客户端 / CDN</div><div class="flow-state">Real IP</div></div><div class="flow-node good"><div class="flow-circle">⇥</div><div class="flow-name">Nginx</div><div class="flow-state">server 选择</div></div><div class="flow-node active"><div class="flow-circle">盾</div><div class="flow-name">Nginx Guard</div><div class="flow-state">access 检查</div></div><div class="flow-node good"><div class="flow-circle">↗</div><div class="flow-name">原有反代</div><div class="flow-state">proxy_pass</div></div><div class="flow-node good"><div class="flow-circle">✓</div><div class="flow-name">应用服务</div><div class="flow-state">Docker / PHP</div></div></div><div class="ops-summary"><div class="mini-stat"><div class="mini-label">正常请求</div><div class="mini-value">317,305</div></div><div class="mini-stat"><div class="mini-label">规则拦截</div><div class="mini-value">248</div></div><div class="mini-stat"><div class="mini-label">运行时封禁</div><div class="mini-value">18</div></div></div></section><section class="card"><div class="card-head"><div><div class="card-title">站点兼容矩阵</div><div class="card-subtitle">只检查，不覆盖原有反代配置</div></div></div><div class="compatibility"><div class="compat-row"><span class="compat-name">PHP / WordPress</span><span class="compat-bar"><span style="width:100%"></span></span><span class="compat-value">通过</span></div><div class="compat-row"><span class="compat-name">Docker / Node</span><span class="compat-bar"><span style="width:100%"></span></span><span class="compat-value">通过</span></div><div class="compat-row"><span class="compat-name">Python / Java</span><span class="compat-bar"><span style="width:100%"></span></span><span class="compat-value">通过</span></div><div class="compat-row"><span class="compat-name">WebSocket</span><span class="compat-bar"><span style="width:100%"></span></span><span class="compat-value">Upgrade 保留</span></div><div class="compat-row"><span class="compat-name">SSE</span><span class="compat-bar"><span style="width:96%"></span></span><span class="compat-value">流式保护</span></div></div></section></div>'
+          + '<div class="ops-grid three"><section class="card"><div class="card-head"><div><div class="card-title">组件健康</div><div class="card-subtitle">后台批处理，不在请求路径启动 Python</div></div></div><div class="health-list">' + healthHtml + '</div></section><section class="card"><div class="card-head"><div><div class="card-title">配置事务</div><div class="card-subtitle">上次应用：' + state.lastApply + '</div></div><span class="badge green">成功</span></div>' + applyPipeline() + '<button class="btn primary" style="width:100%;margin-top:12px" data-action="apply">保存并应用</button></section><section class="card"><div class="card-head"><div><div class="card-title">最近事件</div><div class="card-subtitle">结构化攻击日志</div></div><button class="btn small" data-action="nav" data-nav="攻击日志">全部</button></div><div class="event-list">' + eventHtml + '</div></section></div>';
+      }
+
+      function switcher() {
+        var current = state.variant;
+        return '<div class="variant-switcher"><button data-action="variant-prev" aria-label="上一个原型">‹</button><div class="variant-label"><strong>' + current + '</strong> · ' + variantMeta[current] + '</div><button data-action="variant-next" aria-label="下一个原型">›</button></div><div class="prototype-watermark">PROTOTYPE · 不连接真实 Nginx</div>';
+      }
+
+      function render() {
+        var page;
+        if (state.variant === "B") page = variantB();
+        else if (state.variant === "C") page = variantC();
+        else page = variantA();
+        document.getElementById("app").innerHTML = '<div class="app-shell">' + sidebar() + '<main class="main">' + topbar() + '<div class="page-content">' + page + '</div></main></div>' + switcher() + (state.toast ? '<div class="toast">' + state.toast + '</div>' : "");
+      }
+
+      function setToast(message) {
+        state.toast = message;
+        render();
+        window.setTimeout(function () {
+          state.toast = "";
+          render();
+        }, 2600);
+      }
+
+      function changeVariant(next) {
+        var order = ["A", "B", "C"];
+        var index = order.indexOf(state.variant);
+        index = (index + next + order.length) % order.length;
+        state.variant = order[index];
+        var url = new URL(window.location.href);
+        url.searchParams.set("variant", state.variant);
+        window.history.replaceState({}, "", url.toString());
+        render();
+      }
+
+      function applyConfig() {
+        if (state.applying) return;
+        state.applying = true;
+        state.applyStage = 0;
+        render();
+        var stages = ["保存配置", "生成 include", "备份", "nginx -t", "reload"];
+        var index = 0;
+        state.applyTimer = window.setInterval(function () {
+          index += 1;
+          state.applyStage = index;
+          if (index >= stages.length - 1) {
+            window.clearInterval(state.applyTimer);
+            state.applyTimer = null;
+            state.applying = false;
+            state.lastApply = "刚刚";
+            state.toast = "配置事务完成：nginx -t 通过，已执行 reload（原型模拟）";
+          }
+          render();
+        }, 680);
+      }
+
+      document.addEventListener("click", function (event) {
+        var target = event.target.closest("[data-action]");
+        if (!target) return;
+        var action = target.getAttribute("data-action");
+        if (action === "variant-prev") return changeVariant(-1);
+        if (action === "variant-next") return changeVariant(1);
+        if (action === "toggle-engine") {
+          state.globalEnabled = !state.globalEnabled;
+          return setToast(state.globalEnabled ? "全局引擎已开启（原型状态）" : "全局引擎已关闭（原型状态）");
+        }
+        if (action === "nav") {
+          state.nav = target.getAttribute("data-nav");
+          if (state.nav === "站点防护") state.variant = "B";
+          return render();
+        }
+        if (action === "diagnose") return setToast("系统诊断页已预留：将检查 Nginx 模块、配置 wiring 和日志目录。");
+        if (action === "select-site") {
+          state.selectedSite = target.getAttribute("data-site");
+          state.tab = "概览";
+          if (state.variant !== "B" && target.getAttribute("data-site")) state.variant = "B";
+          return render();
+        }
+        if (action === "set-mode") {
+          state.siteModes[state.selectedSite] = target.getAttribute("data-mode");
+          return setToast(state.selectedSite + " 已切换为 " + target.getAttribute("data-mode") + "（尚未应用）");
+        }
+        if (action === "tab") {
+          state.tab = target.getAttribute("data-tab");
+          return render();
+        }
+        if (action === "toggle-rule") {
+          var ruleId = target.getAttribute("data-rule");
+          state.ruleEnabled[ruleId] = !state.ruleEnabled[ruleId];
+          return setToast(ruleId + " 已" + (state.ruleEnabled[ruleId] ? "启用" : "停用") + "（尚未应用）");
+        }
+        if (action === "apply") return applyConfig();
+        if (action === "reconcile") return setToast("wiring 检查完成：4 个站点配置正常（原型模拟）");
+        if (action === "show-config") {
+          state.variant = "B";
+          state.tab = "Nginx预览";
+          return render();
+        }
+        if (action === "remove-ip") {
+          var ip = target.getAttribute("data-ip");
+          state.denyIps = state.denyIps.filter(function (item) { return item !== ip; });
+          return render();
+        }
+      });
+
+      document.addEventListener("keydown", function (event) {
+        var tag = (event.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select" || event.target.isContentEditable) return;
+        if (event.key === "ArrowLeft") changeVariant(-1);
+        if (event.key === "ArrowRight") changeVariant(1);
+      });
+
+      var params = new URLSearchParams(window.location.search);
+      var requested = (params.get("variant") || "A").toUpperCase();
+      if (variantMeta[requested]) state.variant = requested;
+      render();
+    }());
+  </script>
+</body>
+</html>
