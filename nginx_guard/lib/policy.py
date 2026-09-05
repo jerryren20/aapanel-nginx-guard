@@ -105,6 +105,60 @@ _DANGEROUS_REGEX = re.compile(
 BODY_MAX_BYTES = 1024 * 1024
 
 
+def _normalize_rate_path_item(item, index):
+    prefix = "URL 限流第 %s 行" % index
+    if not isinstance(item, dict):
+        raise ValidationError("%s 必须是对象" % prefix)
+    path = validate_text(item.get("path"), "%s 路径" % prefix, 128)
+    if "?" in path or "#" in path:
+        raise ValidationError("%s 不允许包含查询参数或片段" % prefix)
+    if not path.startswith("/") or any(
+        ord(character) < 32
+        or ord(character) == 127
+        or character in "#\"'{};\\"
+        for character in path
+    ):
+        raise ValidationError("%s 路径无效" % prefix)
+    canonical_path = path.rstrip("/") or "/"
+    canonical_path = canonical_path.lower()
+    try:
+        rate = max(1, min(1000, int(item.get("rate", 2))))
+        burst = max(1, min(10000, int(item.get("burst", 20))))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValidationError("%s 速率或 burst 无效" % prefix) from exc
+    raw_unit = str(item.get("unit", "s")).strip().lower()
+    unit = {"r/s": "s", "r/m": "m"}.get(raw_unit, raw_unit)
+    if unit not in {"s", "m"}:
+        raise ValidationError("%s 单位只能是 s 或 m" % prefix)
+    return {"path": canonical_path, "rate": rate, "unit": unit, "burst": burst}
+
+
+def normalize_rate_paths(items):
+    """Validate, canonicalize and de-duplicate per-path rate settings.
+
+    Nginx renders these paths with a case-insensitive prefix match and treats
+    a trailing slash as the same boundary.  Keep one persisted definition for
+    that effective key; a later definition intentionally replaces the earlier
+    one while retaining its original position.
+    """
+
+    if items is None:
+        return []
+    if not isinstance(items, (list, tuple)):
+        raise ValidationError("URL 限流项必须是数组")
+    result = []
+    positions = {}
+    for index, item in enumerate(items, 1):
+        normalized = _normalize_rate_path_item(item, index)
+        key = normalized["path"]
+        if key in positions:
+            result[positions[key]] = normalized
+        else:
+            positions[key] = len(result)
+            result.append(normalized)
+    return result
+
+
 def validate_interface_whitelist(entries):
     """Validate full HTTP(S) URLs used for ordinary-rule bypasses.
 

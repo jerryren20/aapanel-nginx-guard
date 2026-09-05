@@ -105,7 +105,7 @@
     .notice { padding: 12px 14px; border: 1px solid #d5ecd8; border-radius: 5px; color: #377442; background: var(--brand-pale); }
     .notice.warn { border-color: #f1dfad; color: #80631a; background: #fffaf0; }
     .modal-mask { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; overflow: auto; background: rgba(31, 45, 38, .32); }
-    .ng-modal { width: min(660px, 100%); max-height: calc(100% - 40px); overflow: auto; background: #fff; border-radius: 8px; box-shadow: 0 14px 45px rgba(30, 50, 36, .2); }
+    .ng-modal { width: min(960px, calc(100vw - 24px)); max-width: 100%; max-height: calc(100% - 40px); overflow: auto; background: #fff; border-radius: 8px; box-shadow: 0 14px 45px rgba(30, 50, 36, .2); }
     .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line); }
     .modal-body { padding: 20px; }
     .modal-foot { display: flex; justify-content: flex-end; gap: 9px; padding: 14px 20px; border-top: 1px solid var(--line); }
@@ -397,8 +397,7 @@
     var ratePaths = (policy.rate_paths || []).map(function (item) { return [item.path, item.rate || 2, item.unit || "s", item.burst || 20].join(" "); }).join("\n");
     if (candidate && candidate.path) {
       var candidateDefaults = rateTemplateDefaults(candidate.category);
-      var candidateLine = [candidate.path, candidateDefaults.rate, candidateDefaults.unit, candidateDefaults.burst].join(" ");
-      ratePaths = ratePaths ? ratePaths + "\n" + candidateLine : candidateLine;
+      ratePaths = upsertRatePathLine(ratePaths, { path: candidate.path, rate: candidateDefaults.rate, unit: candidateDefaults.unit, burst: candidateDefaults.burst });
     }
     var interfaceWhitelist = (policy.interface_whitelist || []).map(function (item) {
       if (typeof item === "string") return item;
@@ -579,6 +578,26 @@
       return { path: parts[0], rate: parts[1] || 2, unit: unit, burst: burst };
     }).filter(Boolean);
   }
+  function ratePathKey(path) {
+    var value = String(path || "/").trim().toLowerCase();
+    return value.replace(/\/+$/, "") || "/";
+  }
+  function upsertRatePathLine(value, item) {
+    var target = ratePathKey(item && item.path);
+    var replacement = [ratePathKey(item && item.path), item.rate || 2, item.unit || "s", item.burst || 20].join(" ");
+    var replaced = false;
+    var lines = String(value || "").split(/\r?\n/).map(function (line) {
+      var parsed = parseRatePathLines(line)[0];
+      if (parsed && ratePathKey(parsed.path) === target) {
+        if (replaced) return null;
+        replaced = true;
+        return replacement;
+      }
+      return line.trim() || null;
+    }).filter(Boolean);
+    if (!replaced) lines.push(replacement);
+    return lines.join("\n");
+  }
   function templateValues(kind) {
     return rateTemplateDefaults(kind);
   }
@@ -593,7 +612,7 @@
     var edit = event.target.closest("[data-edit-site]"); if (edit) { openSiteEditor(edit.getAttribute("data-edit-site")); }
     if (event.target.closest("[data-close-modal]")) { var modal = event.target.closest(".modal-mask"); if (modal) modal.remove(); }
     var saveSite = event.target.closest("[data-save-site]"); if (saveSite) { var siteId = saveSite.getAttribute("data-save-site"); var ratePaths = parseRatePathLines(document.getElementById("edit-rate-paths").value); var policy = { mode: document.getElementById("edit-mode").value, engine: document.getElementById("edit-engine").value, rate_limit: document.getElementById("edit-rate").value, burst: document.getElementById("edit-burst").value, streaming_paths: document.getElementById("edit-streaming").value.split(/\r?\n/).map(function (v) { return v.trim(); }).filter(Boolean), rate_paths: ratePaths, auto_ban: { enabled: document.getElementById("edit-ban-enabled").checked, threshold: document.getElementById("edit-ban-threshold").value, window: document.getElementById("edit-ban-window").value, duration: document.getElementById("edit-ban-duration").value } }; post("save_site_policy", { site_id: siteId, policy: policy }).then(function () { toast("站点配置已保存，请点击应用配置"); var modal = saveSite.closest(".modal-mask"); if (modal) modal.remove(); load("list_sites", "sites", []); }).catch(function (error) { toast(error.message, true); }); }
-    if (event.target.closest("[data-add-rate-template]")) { var kind = document.getElementById("edit-rate-template").value; var pathInput = document.getElementById("edit-rate-template-path"); var path = pathInput.value.trim(); var rate = document.getElementById("edit-rate-template-rate").value || templateValues(kind).rate; var unit = document.getElementById("edit-rate-template-unit").value || templateValues(kind).unit; var burst = document.getElementById("edit-rate-template-burst").value || templateValues(kind).burst; if (!path) { toast("请填写接口路径", true); } else { var textarea = document.getElementById("edit-rate-paths"); var line = [path, rate, unit, burst].join(" "); textarea.value = textarea.value.trim() ? textarea.value.trim() + "\n" + line : line; toast("模板已加入待保存配置"); } }
+    if (event.target.closest("[data-add-rate-template]")) { var kind = document.getElementById("edit-rate-template").value; var pathInput = document.getElementById("edit-rate-template-path"); var path = pathInput.value.trim(); var rate = document.getElementById("edit-rate-template-rate").value || templateValues(kind).rate; var unit = document.getElementById("edit-rate-template-unit").value || templateValues(kind).unit; var burst = document.getElementById("edit-rate-template-burst").value || templateValues(kind).burst; if (!path) { toast("请填写接口路径", true); } else { var textarea = document.getElementById("edit-rate-paths"); textarea.value = upsertRatePathLine(textarea.value, { path: path, rate: rate, unit: unit, burst: burst }); toast("模板已加入待保存配置"); } }
     if (event.target.closest("[data-save-rule]")) { var customRule = { id: document.getElementById("custom-id").value.trim(), match: document.getElementById("custom-match").value, pattern: document.getElementById("custom-pattern").value, action: document.getElementById("custom-action").value, header: document.getElementById("custom-header").value.trim(), enabled: true }; post("save_custom_rule", { rule: customRule }).then(function () { toast("自定义规则已保存，请点击应用配置"); var ruleModal = event.target.closest(".modal-mask"); if (ruleModal) ruleModal.remove(); load("get_rules", "rules", { builtin: [], custom: [] }); }).catch(function (error) { toast(error.message, true); }); }
     if (event.target.closest("[data-add-ip]")) { var sid = document.getElementById("ip-site").value; var val = document.getElementById("ip-value").value; var list = document.getElementById("ip-list").value; post("mutate_ip_list", { site_id: sid, list_name: list, operation: "add", address: val }).then(function () { toast("IP 已添加，请点击应用配置"); loadIp(sid); }).catch(function (error) { toast(error.message, true); }); }
     var removeIp = event.target.closest("[data-remove-ip]"); if (removeIp) { var removeSite = removeIp.getAttribute("data-ip-site"); var removeList = removeIp.getAttribute("data-ip-list"); var removeAddress = removeIp.getAttribute("data-ip-address"); if (window.confirm("确认删除 IP/CIDR：" + removeAddress + "？删除后仍需点击应用配置。")) { post("mutate_ip_list", { site_id: removeSite, list_name: removeList, operation: "remove", address: removeAddress }).then(function () { toast("IP 已删除，请点击应用配置"); loadIp(removeSite); }).catch(function (error) { toast(error.message, true); }); } }

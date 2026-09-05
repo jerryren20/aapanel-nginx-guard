@@ -58,4 +58,4 @@ fi
 # Installation is intentionally inert: no Nginx file is touched, no external
 # service is registered, and the engine remains disabled until the user presses
 # Apply in the aaPanel UI.
-echo "Nginx Guard 1.0.14 installed; engine disabled."
+echo "Nginx Guard 1.0.15 installed; engine disabled."

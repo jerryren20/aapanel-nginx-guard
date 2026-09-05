@@ -8,6 +8,7 @@ only after validation succeeds.
 from __future__ import annotations
 
 import json
+import heapq
 import os
 import subprocess
 import time
@@ -28,7 +29,7 @@ try:
     )
     from .lib.config_store import ConfigStore
     from .lib.analysis import analyze_jsonl, analysis_to_csv
-    from .lib.logs import cleanup_jsonl_directory, normalize_event
+    from .lib.logs import cleanup_jsonl_directory, iter_log_lines, parse_event_time, safe_event
     from .lib.metrics import aggregate_jsonl
     from .lib.nginx import (
         LocalNginxRunner,
@@ -41,13 +42,13 @@ try:
     from .lib.policy import (
         DEFAULT_RULES,
         PolicyError,
+        normalize_rate_paths,
         validate_custom_rule,
         validate_interface_whitelist,
     )
     from .lib.security import (
         ValidationError,
         normalize_site_id,
-        sanitize_query,
         validate_ip_or_cidr,
         validate_streaming_path,
         validate_text,
@@ -60,7 +61,7 @@ except ImportError:
     )
     from lib.config_store import ConfigStore
     from lib.analysis import analyze_jsonl, analysis_to_csv
-    from lib.logs import cleanup_jsonl_directory, normalize_event
+    from lib.logs import cleanup_jsonl_directory, iter_log_lines, parse_event_time, safe_event
     from lib.metrics import aggregate_jsonl
     from lib.nginx import (
         LocalNginxRunner,
@@ -70,11 +71,10 @@ except ImportError:
         detect_lua_module,
         detect_real_ip_module,
     )
-    from lib.policy import DEFAULT_RULES, PolicyError, validate_custom_rule, validate_interface_whitelist
+    from lib.policy import DEFAULT_RULES, PolicyError, normalize_rate_paths, validate_custom_rule, validate_interface_whitelist
     from lib.security import (
         ValidationError,
         normalize_site_id,
-        sanitize_query,
         validate_ip_or_cidr,
         validate_streaming_path,
         validate_text,
@@ -151,7 +151,7 @@ class nginx_guard_main:
     def _safe_json(value):
         try:
             return json.loads(value) if isinstance(value, str) else value
-        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        except (TypeError, ValueError) as exc:
             raise ValidationError("JSON 参数无效") from exc
 
     def _panel_sites(self):
@@ -233,7 +233,7 @@ class nginx_guard_main:
         desired = self.store.load_desired()
         nginx_v_output = self._nginx_v_output()
         data = {
-            "version": "1.0.14",
+            "version": "1.0.15",
             "engine_enabled": bool(desired.get("engine_enabled", False)),
             "preferred_engine": desired.get("preferred_engine", "auto"),
             "runtime_failure_policy": desired.get("runtime_failure_policy", "open"),
@@ -330,23 +330,10 @@ class nginx_guard_main:
         streaming_paths = []
         for path in policy.get("streaming_paths", []) or []:
             streaming_paths.append(validate_streaming_path(path))
-        rate_paths = []
-        for item in policy.get("rate_paths", []) or []:
-            if not isinstance(item, dict):
-                return _json_response(False, "URL 限流项必须是对象")
-            path = validate_text(item.get("path"), "rate path", 128)
-            if not path.startswith("/") or any(character in path for character in "\r\n\"{};"):
-                return _json_response(False, "URL 限流路径无效")
-            try:
-                path_rate = max(1, min(1000, int(item.get("rate", 2))))
-                path_burst = max(1, min(10000, int(item.get("burst", 20))))
-            except (TypeError, ValueError):
-                return _json_response(False, "URL 限流速率无效")
-            raw_unit = str(item.get("unit", "s")).strip().lower()
-            unit = {"r/s": "s", "r/m": "m"}.get(raw_unit, raw_unit)
-            if unit not in {"s", "m"}:
-                return _json_response(False, "URL 限流单位只能是 s 或 m")
-            rate_paths.append({"path": path, "rate": path_rate, "unit": unit, "burst": path_burst})
+        try:
+            rate_paths = normalize_rate_paths(policy.get("rate_paths", []))
+        except ValidationError as exc:
+            return _json_response(False, str(exc))
         auto_ban = policy.get("auto_ban")
         if not isinstance(auto_ban, dict):
             auto_ban = existing.get("auto_ban", {}) if isinstance(existing.get("auto_ban"), dict) else {}
@@ -577,23 +564,28 @@ class nginx_guard_main:
             "on",
             "yes",
         }
-        path = DATA_ROOT / "logs" / ("events-site-%s.jsonl" % site_id)
         rows = []
-        if path.is_file():
-            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-                try:
-                    row = json.loads(line)
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    continue
-                if isinstance(row, dict):
-                    row["query"] = sanitize_query(row.get("query", ""))
-                    for key in ("cookie", "authorization", "post", "token"):
-                        row.pop(key, None)
-                    row = normalize_event(row)
-                    if blocked_only and not row["blocked"]:
-                        continue
-                    rows.append(row)
-        return _json_response(True, "ok", rows[-limit:][::-1])
+        sequence = 0
+        for line in iter_log_lines(self._site_log_paths(site_id)):
+            try:
+                row = json.loads(line)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(row, dict):
+                continue
+            row = safe_event(row)
+            if blocked_only and not row["blocked"]:
+                continue
+            event_time = parse_event_time(row)
+            timestamp = event_time.timestamp() if event_time is not None else float("-inf")
+            entry = (timestamp, sequence, row)
+            sequence += 1
+            if len(rows) < limit:
+                heapq.heappush(rows, entry)
+            elif entry[:2] > rows[0][:2]:
+                heapq.heapreplace(rows, entry)
+        rows.sort(key=lambda item: item[:2], reverse=True)
+        return _json_response(True, "ok", [item[2] for item in rows])
 
     @staticmethod
     def _blocked_only_value(value):
@@ -610,16 +602,37 @@ class nginx_guard_main:
         for path in logs_dir.glob(prefix + "*"):
             if path.is_file() and not path.is_symlink() and (path.name == prefix or path.name.startswith(prefix + ".")):
                 paths.append(path)
-        return sorted(paths, key=lambda item: (item.name != prefix, item.name))
+        def sort_key(item):
+            if item.name == prefix:
+                return (1, 0.0, item.name)
+            try:
+                mtime = item.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            return (0, mtime, item.name)
+
+        return sorted(paths, key=sort_key)
+
+    def _all_site_log_paths(self):
+        logs_dir = DATA_ROOT / "logs"
+        if not logs_dir.is_dir():
+            return []
+        paths = [
+            path
+            for path in logs_dir.glob("events-site-*.jsonl*")
+            if path.is_file() and not path.is_symlink()
+        ]
+        def sort_key(item):
+            try:
+                mtime = item.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            return (mtime, item.name)
+
+        return sorted(paths, key=sort_key)
 
     def _iter_site_log_lines(self, site_id):
-        for path in self._site_log_paths(site_id):
-            try:
-                with path.open("r", encoding="utf-8", errors="replace") as handle:
-                    for line in handle:
-                        yield line
-            except OSError:
-                continue
+        yield from iter_log_lines(self._site_log_paths(site_id))
 
     def _analyze_site_logs(self, site_id, window, blocked_only=False, top_n=10):
         result = analyze_jsonl(
@@ -678,29 +691,8 @@ class nginx_guard_main:
         if denied:
             return denied
         self._rotate_logs_unchecked()
-        paths = list((DATA_ROOT / "logs").glob("events-site-*.jsonl")) if (DATA_ROOT / "logs").is_dir() else []
-        merged = {
-            "total": 0,
-            "blocked": 0,
-            "malformed": 0,
-            "by_site": {},
-            "by_rule": {},
-            "hourly": [{"requests": 0, "attacks": 0} for _ in range(24)],
-        }
-        for path in paths:
-            result = aggregate_jsonl(path)
-            merged["total"] += result["total"]
-            merged["blocked"] += result["blocked"]
-            merged["malformed"] += result["malformed"]
-            for key in ("by_site", "by_rule"):
-                for item, count in result[key].items():
-                    merged[key][item] = merged[key].get(item, 0) + count
-            for index, bucket in enumerate(result.get("hourly", [])):
-                if index >= len(merged["hourly"]):
-                    break
-                merged["hourly"][index]["requests"] += int(bucket.get("requests", 0))
-                merged["hourly"][index]["attacks"] += int(bucket.get("attacks", 0))
-        return _json_response(True, "ok", merged)
+        result = aggregate_jsonl(iter_log_lines(self._all_site_log_paths()))
+        return _json_response(True, "ok", result)
 
     @api_errors
     def get_cloudflare(self, get=None):

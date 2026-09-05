@@ -1,6 +1,9 @@
 import json
+import gzip
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from nginx_guard.lib.analysis import analyze_jsonl, analysis_to_csv
 
@@ -147,6 +150,65 @@ class LogAnalysisTests(unittest.TestCase):
         self.assertNotIn("must-not-export", csv_text)
         self.assertNotIn("authorization", csv_text.lower())
         self.assertNotIn("token=", csv_text.lower())
+
+    def test_endpoint_markers_require_path_segment_boundaries(self):
+        rows = []
+        for index in range(3):
+            rows.extend(
+                [
+                    {
+                        "time": (self.now - timedelta(minutes=index + 1)).isoformat(),
+                        "uri": "/login",
+                        "method": "POST",
+                        "status": 200,
+                    },
+                    {
+                        "time": (self.now - timedelta(minutes=index + 1)).isoformat(),
+                        "uri": "/auth/login/",
+                        "method": "POST",
+                        "status": 200,
+                    },
+                    {
+                        "time": (self.now - timedelta(minutes=index + 1)).isoformat(),
+                        "uri": "/login-old",
+                        "method": "POST",
+                        "status": 200,
+                    },
+                    {
+                        "time": (self.now - timedelta(minutes=index + 1)).isoformat(),
+                        "uri": "/login2",
+                        "method": "POST",
+                        "status": 200,
+                    },
+                ]
+            )
+
+        result = analyze_jsonl(rows, now=self.now, window="24h")
+        paths = {item["path"] for item in result["endpoint_candidates"]}
+
+        self.assertIn("/login", paths)
+        self.assertIn("/auth/login", paths)
+        self.assertNotIn("/login-old", paths)
+        self.assertNotIn("/login2", paths)
+
+    def test_analysis_accepts_a_gzip_log_path(self):
+        row = {
+            "time": (self.now - timedelta(minutes=1)).isoformat(),
+            "remote_addr": "198.51.100.30",
+            "uri": "/admin",
+            "rule_id": "NG1001",
+            "action": "BLOCK",
+            "status": 403,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "events-site-1.jsonl.1.gz"
+            with gzip.open(path, "wt", encoding="utf-8") as handle:
+                handle.write(json.dumps(row) + "\n")
+
+            result = analyze_jsonl(path, now=self.now, window="24h")
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["blocked"], 1)
 
 
 if __name__ == "__main__":

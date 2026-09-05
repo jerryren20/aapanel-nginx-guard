@@ -268,6 +268,25 @@ class RenderingTests(unittest.TestCase):
             fragment = manager._render_global(True, False, [site])
             self.assertIn("rate=10r/m", fragment)
 
+    def test_url_rate_paths_render_one_zone_after_case_and_slash_deduplication(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = NginxConfigManager(Path(tmp) / "nginx.conf", Path(tmp) / "vhost", Path(tmp))
+            site = {
+                "id": "1",
+                "mode": "BLOCK",
+                "engine": "native",
+                "rate_paths": [
+                    {"path": "/Login/", "rate": 10, "unit": "m", "burst": 3},
+                    {"path": "/login", "rate": 20, "unit": "s", "burst": 5},
+                ],
+            }
+            global_fragment = manager._render_global(True, False, [site])
+            site_fragment = manager._render_site(site, False)
+
+            self.assertEqual(global_fragment.count("limit_req_zone $ng_guard_url_key_1_"), 1)
+            self.assertEqual(site_fragment.count("limit_req zone=ng_guard_url_1_"), 1)
+            self.assertIn("rate=20r/s", global_fragment)
+
     def test_whitelisted_ip_has_no_native_rate_key_for_that_site(self):
         with tempfile.TemporaryDirectory() as tmp:
             manager = NginxConfigManager(Path(tmp) / "nginx.conf", Path(tmp) / "vhost", Path(tmp))

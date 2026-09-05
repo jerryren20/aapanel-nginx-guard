@@ -7,12 +7,30 @@ from nginx_guard.lib.policy import (
     evaluate_body,
     evaluate_request,
     interface_whitelist_matches,
+    normalize_rate_paths,
     validate_custom_rule,
     validate_interface_whitelist,
 )
+from nginx_guard.lib.security import ValidationError
 
 
 class PolicyTests(unittest.TestCase):
+    def test_rate_paths_are_canonicalized_and_last_duplicate_wins(self):
+        result = normalize_rate_paths(
+            [
+                {"path": "/Login/", "rate": "10", "unit": "r/m", "burst": "3"},
+                {"path": "/login", "rate": "20", "unit": "s", "burst": "5"},
+            ]
+        )
+
+        self.assertEqual(result, [{"path": "/login", "rate": 20, "unit": "s", "burst": 5}])
+
+    def test_rate_path_query_and_fragment_are_rejected_with_line_number(self):
+        for value in ("/login?next=/", "/login#fragment"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValidationError, "第 1 行"):
+                    normalize_rate_paths([{"path": value, "rate": 10, "burst": 3}])
+
     def test_high_confidence_rules_block_dangerous_inputs(self):
         self.assertEqual(evaluate_request("/.env", "", {}, DEFAULT_RULES)["rule_id"], "NG1001")
         self.assertEqual(

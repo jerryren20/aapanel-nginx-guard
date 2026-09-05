@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import datetime
+import gzip
 import os
 import shutil
 import time
 from pathlib import Path
+
+from .security import sanitize_query
 
 
 DEFAULT_LOG_MAX_BYTES = 20 * 1024 * 1024
@@ -16,6 +19,22 @@ DEFAULT_LOG_MAX_TOTAL_BYTES = 100 * 1024 * 1024
 
 BLOCK_ACTIONS = {"block", "deny", "rate_limit", "403", "404", "429", "444"}
 BLOCK_STATUS_CODES = {403, 429, 444}
+ATTACK_STATUS_CODES = {403, 404, 429, 444}
+_SENSITIVE_EVENT_KEY_MARKERS = (
+    "cookie",
+    "authorization",
+    "token",
+    "password",
+    "passwd",
+    "secret",
+    "signature",
+    "api_key",
+    "access_key",
+    "private_key",
+    "request_body",
+    "body",
+    "post",
+)
 
 
 def is_blocked_event(row) -> bool:
@@ -45,6 +64,50 @@ def is_blocked_event(row) -> bool:
     return bool(rule_id and status in BLOCK_STATUS_CODES)
 
 
+def is_attack_event(row, event_blocked=None) -> bool:
+    """Return whether a row represents an attack or WAF decision event."""
+
+    blocked = is_blocked_event(row) if event_blocked is None else bool(event_blocked)
+    if blocked:
+        return True
+    if not isinstance(row, dict):
+        return False
+
+
+def parse_event_time(row):
+    """Parse supported event timestamps into an aware UTC datetime."""
+
+    if not isinstance(row, dict):
+        return None
+    value = row.get("time")
+    if value is None or value == "":
+        value = row.get("timestamp")
+    if value is None:
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            return datetime.datetime.fromtimestamp(value, datetime.timezone.utc)
+        text = str(value).strip()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = datetime.datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=datetime.timezone.utc)
+        return parsed.astimezone(datetime.timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+    rule_id = str(row.get("rule_id") or row.get("rule") or "").strip().lower()
+    if rule_id and rule_id not in {"unknown", "—", "-"}:
+        return True
+    action = str(row.get("action") or "").strip().lower()
+    if action in BLOCK_ACTIONS:
+        return True
+    try:
+        return int(row.get("status")) in ATTACK_STATUS_CODES
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def normalize_event(row):
     """Return a compatibility-shaped event row for the panel log view."""
 
@@ -63,6 +126,59 @@ def normalize_event(row):
     )
     normalized["blocked"] = is_blocked_event(normalized)
     return normalized
+
+
+def _is_sensitive_event_key(key):
+    normalized = str(key or "").lower().replace("-", "_")
+    return any(marker in normalized for marker in _SENSITIVE_EVENT_KEY_MARKERS)
+
+
+def _strip_request_query(value):
+    """Remove query strings from legacy request-line metadata."""
+
+    text = str(value or "")
+    if not text:
+        return text
+    parts = text.split()
+    for index, part in enumerate(parts):
+        if part.startswith("/") or part.lower().startswith(("http://", "https://")):
+            parts[index] = part.split("?", 1)[0].split("#", 1)[0]
+    return " ".join(parts)
+
+
+def safe_event(row):
+    """Normalize one event and remove fields that must never leave the plugin."""
+
+    normalized = normalize_event(row)
+    if not normalized:
+        return normalized
+    normalized["query"] = sanitize_query(normalized.get("query", ""))
+    for key in list(normalized):
+        if _is_sensitive_event_key(key):
+            normalized.pop(key, None)
+    for key in ("uri", "request_uri", "path", "request"):
+        if key in normalized:
+            normalized[key] = _strip_request_query(normalized[key])
+    return normalized
+
+
+def iter_log_lines(paths):
+    """Stream owned JSONL text, including ordinary and gzip rotations."""
+
+    for raw_path in paths or ():
+        path = Path(raw_path)
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            if path.name.endswith(".gz"):
+                handle = gzip.open(path, "rt", encoding="utf-8", errors="replace")
+            else:
+                handle = path.open("r", encoding="utf-8", errors="replace")
+            with handle:
+                for line in handle:
+                    yield line
+        except (OSError, EOFError, UnicodeError):
+            continue
 
 
 def _copytruncate(path, rotated):

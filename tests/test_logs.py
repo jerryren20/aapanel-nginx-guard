@@ -7,13 +7,25 @@ from pathlib import Path
 
 from nginx_guard.lib.logs import (
     cleanup_jsonl_directory,
+    iter_log_lines,
     is_blocked_event,
     normalize_event,
+    safe_event,
     rotate_jsonl,
 )
 
 
 class LogRotationTests(unittest.TestCase):
+    def test_log_reader_skips_corrupt_gzip_rotation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            corrupt = root / "events-site-1.jsonl.20260904120000.gz"
+            corrupt.write_bytes(b"not-a-gzip-file")
+            valid = root / "events-site-1.jsonl"
+            valid.write_text('{"status":200}\n', encoding="utf-8")
+
+            self.assertEqual(list(iter_log_lines([corrupt, valid])), ['{"status":200}\n'])
+
     def test_blocked_event_distinguishes_monitor_from_real_block(self):
         self.assertTrue(is_blocked_event({"action": "BLOCK", "status": 403}))
         self.assertTrue(is_blocked_event({"action": "RATE_LIMIT", "status": 429}))
@@ -29,6 +41,24 @@ class LogRotationTests(unittest.TestCase):
         self.assertEqual(normalized["content_type"], "")
         self.assertEqual(normalized["content_length"], "")
         self.assertTrue(normalized["blocked"])
+
+    def test_safe_event_removes_legacy_sensitive_fields_and_request_queries(self):
+        normalized = safe_event(
+            {
+                "remote_addr": "198.51.100.8",
+                "query": "token=secret&name=alice",
+                "http_cookie": "session=secret",
+                "access_token": "secret",
+                "request": "GET /login?token=secret HTTP/1.1",
+                "status": 403,
+                "rule_id": "NG1001",
+            }
+        )
+
+        self.assertEqual(normalized["query"], "token=[REDACTED]&name=alice")
+        self.assertEqual(normalized["request"], "GET /login HTTP/1.1")
+        self.assertNotIn("http_cookie", normalized)
+        self.assertNotIn("access_token", normalized)
 
     def test_rotation_caps_file_size_and_count(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -11,8 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .logs import is_blocked_event, normalize_event
-from .security import sanitize_query
+from .logs import is_attack_event, is_blocked_event, iter_log_lines, parse_event_time, safe_event
 
 
 WINDOWS = {
@@ -87,49 +86,6 @@ def _as_utc(value=None):
     return value.astimezone(timezone.utc)
 
 
-def parse_event_time(row):
-    """Parse the supported Nginx time forms into an aware UTC datetime."""
-
-    if not isinstance(row, dict):
-        return None
-    value = row.get("time") or row.get("timestamp")
-    if value is None:
-        return None
-    try:
-        if isinstance(value, (int, float)):
-            return datetime.fromtimestamp(value, timezone.utc)
-        text = str(value).strip()
-        if text.endswith("Z"):
-            text = text[:-1] + "+00:00"
-        parsed = datetime.fromisoformat(text)
-        return _as_utc(parsed)
-    except (TypeError, ValueError, OverflowError, OSError):
-        return None
-
-
-def _safe_row(row):
-    """Normalize old rows while keeping analysis away from secrets."""
-
-    normalized = normalize_event(row)
-    normalized["query"] = sanitize_query(normalized.get("query", ""))
-    for key in ("cookie", "authorization", "post", "token", "body", "request_body"):
-        normalized.pop(key, None)
-    return normalized
-
-
-def _iter_rows(lines):
-    for line in lines:
-        if isinstance(line, dict):
-            row = line
-        else:
-            try:
-                row = json.loads(str(line))
-            except (TypeError, ValueError, json.JSONDecodeError):
-                continue
-        if isinstance(row, dict):
-            yield _safe_row(row)
-
-
 def _window_settings(window):
     key = str(window or "24h").strip().lower()
     if key not in WINDOWS:
@@ -164,18 +120,39 @@ def _event_path(row):
     return raw.split("?", 1)[0].split("#", 1)[0] or "/"
 
 
+def _candidate_path(path):
+    """Return the effective path key used for endpoint recommendations."""
+
+    value = str(path or "/").strip().lower()
+    return value.rstrip("/") or "/"
+
+
 def _is_static_path(path):
     lowered = str(path or "").lower()
     return lowered.endswith(STATIC_SUFFIXES) or lowered.startswith(_STATIC_PREFIXES)
 
 
 def _has_marker(path, marker):
-    lowered = str(path or "").lower()
-    marker = str(marker).lower().strip("/")
-    if "/" in marker:
-        return ("/" + marker) in lowered or lowered.strip("/") == marker
-    tokens = [item for item in re.split(r"[/_.-]+", lowered) if item]
-    return marker in tokens
+    path_parts = [item for item in str(path or "").lower().strip("/").split("/") if item]
+    marker_parts = [item for item in str(marker).lower().strip("/").split("/") if item]
+    if not path_parts or not marker_parts or len(marker_parts) > len(path_parts):
+        return False
+    for start in range(len(path_parts) - len(marker_parts) + 1):
+        matched = True
+        for offset, marker_part in enumerate(marker_parts):
+            value = path_parts[start + offset]
+            is_last = offset == len(marker_parts) - 1
+            if value == marker_part:
+                continue
+            if is_last and re.fullmatch(
+                re.escape(marker_part) + r"\.[a-z0-9][a-z0-9_-]{0,15}", value
+            ):
+                continue
+            matched = False
+            break
+        if matched:
+            return True
+    return False
 
 
 def _categories_for(path):
@@ -198,21 +175,6 @@ def _top(counter, top_n, key_name, blocked_counter=None):
         }
         for value, count in values
     ]
-
-
-def _is_attack_event(row, event_blocked):
-    if event_blocked:
-        return True
-    rule_id = str(row.get("rule_id") or row.get("rule") or "").strip().lower()
-    if rule_id and rule_id not in {"unknown", "—", "-"}:
-        return True
-    action = str(row.get("action") or "").strip().lower()
-    if action in {"block", "deny", "rate_limit", "403", "404", "429", "444"}:
-        return True
-    try:
-        return int(row.get("status")) in {403, 404, 429, 444}
-    except (TypeError, ValueError, OverflowError):
-        return False
 
 
 def _candidate_reason(category, methods, content_types, multipart):
@@ -263,11 +225,7 @@ def analyze_jsonl(lines, now=None, window="24h", blocked_only=False, top_n=10):
     """Analyze JSONL rows without retaining the raw request data."""
 
     if isinstance(lines, (str, Path)):
-        try:
-            with Path(lines).open("r", encoding="utf-8", errors="replace") as handle:
-                return analyze_jsonl(handle, now=now, window=window, blocked_only=blocked_only, top_n=top_n)
-        except OSError:
-            lines = ()
+        lines = iter_log_lines([Path(lines)])
     window, duration, bucket_size = _window_settings(window)
     try:
         top_n = max(1, min(50, int(top_n)))
@@ -314,13 +272,13 @@ def analyze_jsonl(lines, now=None, window="24h", blocked_only=False, top_n=10):
     for line in lines:
         try:
             raw = line if isinstance(line, dict) else json.loads(str(line))
-        except (TypeError, ValueError, json.JSONDecodeError):
+        except (TypeError, ValueError):
             malformed += 1
             continue
         if not isinstance(raw, dict):
             malformed += 1
             continue
-        row = _safe_row(raw)
+        row = safe_event(raw)
         timestamp = parse_event_time(row)
         if timestamp is None:
             continue
@@ -343,7 +301,7 @@ def analyze_jsonl(lines, now=None, window="24h", blocked_only=False, top_n=10):
         rule_name = _rule_name(rule_id, row.get("rule_name") or row.get("attack_type"))
         status = str(row.get("status") if row.get("status") is not None else "—")
         action = str(row.get("action") or ("BLOCK" if event_blocked else "MONITOR")).upper()
-        if _is_attack_event(row, event_blocked):
+        if is_attack_event(row, event_blocked):
             ips[ip] += 1
             paths[path] += 1
             if event_blocked:
@@ -367,7 +325,7 @@ def analyze_jsonl(lines, now=None, window="24h", blocked_only=False, top_n=10):
             ).strip()[:128]
             multipart = "multipart/form-data" in content_type.lower()
             for category in _categories_for(path):
-                candidate = candidates[(category, path)]
+                candidate = candidates[(category, _candidate_path(path))]
                 candidate["requests"] += 1
                 candidate["methods"].add(method)
                 if content_type:

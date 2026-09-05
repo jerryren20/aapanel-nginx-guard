@@ -1,4 +1,5 @@
 import json
+import gzip
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -8,6 +9,17 @@ from nginx_guard.lib.metrics import aggregate_jsonl
 
 
 class MetricsTests(unittest.TestCase):
+    def test_aggregate_jsonl_reads_gzip_rotation_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "events-site-1.jsonl.1.gz"
+            with gzip.open(path, "wt", encoding="utf-8") as handle:
+                handle.write(json.dumps({"site": "example.com", "action": "BLOCK"}) + "\n")
+
+            result = aggregate_jsonl(path)
+
+            self.assertEqual(result["total"], 1)
+            self.assertEqual(result["blocked"], 1)
+
     def test_aggregate_jsonl_counts_attacks_by_site_and_rule(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "attack.jsonl"

@@ -20,6 +20,7 @@ from .policy import (
     BODY_MAX_BYTES,
     DEFAULT_RULES,
     PolicyError,
+    normalize_rate_paths,
     native_patterns,
     validate_custom_rule,
     validate_interface_whitelist,
@@ -509,29 +510,14 @@ class NginxConfigManager:
 
     @classmethod
     def _rate_path_settings(cls, site):
-        result = []
-        for item in site.get("rate_paths", []) or []:
-            if not isinstance(item, dict):
-                raise NginxCommandError("rate path must be an object")
-            path = str(item.get("path", "")).strip()
-            if not path.startswith("/") or len(path) > 128 or any(
-                ord(character) < 32
-                or ord(character) == 127
-                or character in "#\"'{};\\"
-                for character in path
-            ):
-                raise NginxCommandError("invalid rate path")
-            try:
-                rate = max(1, min(1000, int(item.get("rate", 2))))
-                burst = max(1, min(10000, int(item.get("burst", 20))))
-            except (TypeError, ValueError) as exc:
-                raise NginxCommandError("invalid rate path limits") from exc
-            raw_unit = str(item.get("unit", "s")).strip().lower()
-            unit = {"r/s": "s", "r/m": "m"}.get(raw_unit, raw_unit)
-            if unit not in {"s", "m"}:
-                raise NginxCommandError("invalid rate path unit")
-            result.append((path, rate, unit, burst))
-        return result
+        try:
+            normalized = normalize_rate_paths(site.get("rate_paths", []))
+        except (PolicyError, ValidationError, ValueError) as exc:
+            raise NginxCommandError("invalid rate path: %s" % exc) from exc
+        return [
+            (item["path"], item["rate"], item["unit"], item["burst"])
+            for item in normalized
+        ]
 
     @staticmethod
     def _builtin_status(site, rule_id, default=403):

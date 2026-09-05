@@ -1,4 +1,5 @@
 import json
+import gzip
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -33,6 +34,76 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(result["data"][0]["client_ip"], "198.51.100.3")
             self.assertEqual(result["data"][0]["cfip"], "")
             self.assertTrue(result["data"][0]["blocked"])
+
+    def test_get_logs_reads_gzip_rotation_and_keeps_latest_blocked_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs = root / "logs"
+            logs.mkdir()
+            rotated = logs / "events-site-1.jsonl.20260904120000.gz"
+            with gzip.open(rotated, "wt", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "time": "2026-09-05T11:30:00+00:00",
+                            "remote_addr": "198.51.100.1",
+                            "uri": "/rotated-new",
+                            "action": "BLOCK",
+                            "status": 403,
+                        }
+                    )
+                    + "\n"
+                )
+            (logs / "events-site-1.jsonl").write_text(
+                "".join(
+                    json.dumps(row) + "\n"
+                    for row in (
+                        {
+                            "time": "2026-09-05T11:00:00+00:00",
+                            "remote_addr": "198.51.100.2",
+                            "uri": "/new",
+                            "action": "BLOCK",
+                            "status": 403,
+                        },
+                        {
+                            "time": "2026-09-05T11:01:00+00:00",
+                            "remote_addr": "198.51.100.3",
+                            "uri": "/monitor",
+                            "action": "MONITOR",
+                            "status": 403,
+                        },
+                    )
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(controller, "DATA_ROOT", root):
+                result = controller.nginx_guard_main().get_logs(
+                    {"site_id": "1", "blocked_only": "true", "limit": "2"}
+                )
+
+            self.assertTrue(result["status"])
+            self.assertEqual([row["uri"] for row in result["data"]], ["/rotated-new", "/new"])
+
+    def test_metrics_include_compressed_rotated_logs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs = root / "logs"
+            logs.mkdir()
+            row = {
+                "time": datetime.now(timezone.utc).isoformat(),
+                "site_id": "1",
+                "rule_id": "NG1001",
+                "status": 403,
+                "action": "BLOCK",
+            }
+            with gzip.open(logs / "events-site-1.jsonl.20260904120000.gz", "wt", encoding="utf-8") as handle:
+                handle.write(json.dumps(row) + "\n")
+            with patch.object(controller, "DATA_ROOT", root):
+                result = controller.nginx_guard_main().get_metrics({})
+
+            self.assertTrue(result["status"])
+            self.assertEqual(result["data"]["total"], 1)
+            self.assertEqual(result["data"]["blocked"], 1)
 
     def test_log_analysis_and_csv_export_are_read_only_and_include_rotated_logs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -111,6 +182,26 @@ class ControllerTests(unittest.TestCase):
             self.assertTrue(result["status"])
             self.assertEqual(saved["rate_paths"][0]["unit"], "m")
             self.assertEqual(saved["rate_paths"][1]["unit"], "s")
+
+    def test_save_site_policy_deduplicates_rate_paths_using_last_definition(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(controller, "DATA_ROOT", Path(tmp)):
+                instance = controller.nginx_guard_main()
+                result = instance.save_site_policy(
+                    {
+                        "site_id": "1",
+                        "policy": {
+                            "mode": "BLOCK",
+                            "rate_paths": [
+                                {"path": "/Login/", "rate": 10, "unit": "m", "burst": 3},
+                                {"path": "/login", "rate": 20, "unit": "s", "burst": 5},
+                            ],
+                        },
+                    }
+                )
+
+            self.assertTrue(result["status"])
+            self.assertEqual(result["data"]["rate_paths"], [{"path": "/login", "rate": 20, "unit": "s", "burst": 5}])
 
     def test_ip_list_remove_is_an_exact_persistent_operation(self):
         with tempfile.TemporaryDirectory() as tmp:

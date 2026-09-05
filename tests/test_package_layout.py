@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -14,7 +15,7 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertTrue(ui_path.is_file())
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["name"], "nginx_guard")
-        self.assertEqual(manifest["version"], "1.0.14")
+        self.assertEqual(manifest["version"], "1.0.15")
         self.assertTrue(manifest["shell"].endswith("install.sh"))
         ui = ui_path.read_text(encoding="utf-8").lower()
         self.assertIn("#20a53a", ui)
@@ -74,6 +75,21 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn("new resizeobserver", ui)
         self.assertIn("entries[0].contentrect.width", ui)
         self.assertIn('layout.classlist.toggle("narrow", width < 760)', ui)
+
+    def test_rate_candidate_is_prefill_only_and_modal_width_is_internal_responsive(self):
+        ui = (ROOT / "nginx_guard" / "index.html").read_text(encoding="utf-8").lower()
+        self.assertIn("function upsertratepathline", ui)
+        self.assertIn("width: min(960px", ui)
+        self.assertIn("ratepaths = upsertratepathline(ratepaths", ui)
+        self.assertIn("textarea.value = upsertratepathline(textarea.value", ui)
+        candidate = re.search(
+            r"var candidatebutton = event\.target\.closest\(\"\[data-use-rate-candidate\]\"\);(.*?)(?=if \(event\.target\.closest\(\"\[data-lookup-cf-ip\]\"\))",
+            ui,
+            re.S,
+        )
+        self.assertIsNotNone(candidate)
+        self.assertNotIn("save_site_policy", candidate.group(1))
+        self.assertNotIn("apply_config", candidate.group(1))
 
     def test_install_does_not_register_an_external_service(self):
         install = (ROOT / "nginx_guard" / "install.sh").read_text(encoding="utf-8")

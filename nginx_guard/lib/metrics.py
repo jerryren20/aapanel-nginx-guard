@@ -7,33 +7,19 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .logs import is_attack_event, is_blocked_event, iter_log_lines, parse_event_time
+
 
 def aggregate_jsonl(lines, now=None):
     current = _as_utc(now)
 
     if isinstance(lines, (str, Path)):
-        try:
-            with Path(lines).open("r", encoding="utf-8", errors="replace") as handle:
-                lines = handle
-                return _aggregate_lines(lines, current)
-        except OSError:
-            return _empty_result()
+        return _aggregate_lines(iter_log_lines([Path(lines)]), current)
     return _aggregate_lines(lines, current)
 
 
 def _empty_hourly():
     return [{"requests": 0, "attacks": 0} for _ in range(24)]
-
-
-def _empty_result():
-    return {
-        "total": 0,
-        "blocked": 0,
-        "malformed": 0,
-        "by_site": {},
-        "by_rule": {},
-        "hourly": _empty_hourly(),
-    }
 
 
 def _as_utc(value):
@@ -44,35 +30,6 @@ def _as_utc(value):
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
-
-
-def _parse_timestamp(row):
-    value = row.get("time") or row.get("timestamp")
-    if value is None:
-        return None
-    try:
-        if isinstance(value, (int, float)):
-            return datetime.fromtimestamp(value, timezone.utc)
-        text = str(value).strip()
-        if text.endswith("Z"):
-            text = text[:-1] + "+00:00"
-        parsed = datetime.fromisoformat(text)
-        return _as_utc(parsed)
-    except (TypeError, ValueError, OverflowError, OSError):
-        return None
-
-
-def _is_attack(row):
-    action = str(row.get("action") or "").lower()
-    if row.get("blocked") is True or action in {"block", "deny", "rate_limit", "403", "404", "429", "444"}:
-        return True
-    rule = str(row.get("rule_id") or row.get("rule") or "").strip()
-    if rule and rule.lower() != "unknown":
-        return True
-    try:
-        return int(row.get("status")) in {403, 404, 429, 444}
-    except (TypeError, ValueError):
-        return False
 
 
 def _aggregate_lines(lines, now):
@@ -89,27 +46,26 @@ def _aggregate_lines(lines, now):
             continue
         try:
             row = json.loads(text)
-        except (TypeError, ValueError, json.JSONDecodeError):
+        except (TypeError, ValueError):
             malformed += 1
             continue
         if not isinstance(row, dict):
             malformed += 1
             continue
         total += 1
-        action = str(row.get("action") or "").lower()
-        if row.get("blocked") is True or action in {"block", "deny", "rate_limit"}:
+        if is_blocked_event(row):
             blocked += 1
         site = str(row.get("site_id") or row.get("site") or "unknown")
         rule = str(row.get("rule_id") or row.get("rule") or "unknown")
         by_site[site] += 1
         by_rule[rule] += 1
-        timestamp = _parse_timestamp(row)
+        timestamp = parse_event_time(row)
         if timestamp is not None:
             age = (now - timestamp).total_seconds()
             if 0 <= age < 24 * 60 * 60:
                 index = 23 - int(age // (60 * 60))
                 hourly[index]["requests"] += 1
-                if _is_attack(row):
+                if is_attack_event(row):
                     hourly[index]["attacks"] += 1
 
     return {

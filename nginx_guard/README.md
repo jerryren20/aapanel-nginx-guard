@@ -1,4 +1,4 @@
-# Nginx Guard 1.0.14
+# Nginx Guard 1.0.15
 
 Nginx Guard 是一个面向 aaPanel Nginx 的轻量、按站点启用的 WAF 插件。生产界面使用 aaPanel 风格的绿色主题，安装后默认关闭，不会在安装阶段改写 Nginx。
 
@@ -25,7 +25,7 @@ Lua 可用时，站点的攻击阈值可写入 Nginx shared dict，按 TTL 临�
 
 ## 安装
 
-1. 在 aaPanel 的 App Store → Third-party Plugin → Import 导入 dist/nginx_guard-1.0.14.zip。
+1. 在 aaPanel 的 App Store → Third-party Plugin → Import 导入 dist/nginx_guard-1.0.15.zip。
 2. 打开 Nginx Guard，确认网站列表和诊断信息。
 3. 先将站点设为 MONITOR，保存后点击右上角“应用配置”。
 4. 观察日志确认误报，再切换到 BLOCK。
